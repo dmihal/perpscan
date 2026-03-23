@@ -195,6 +195,29 @@ export async function getTopExchanges(): Promise<Protocol[]> {
   }
 }
 
+export interface ChartDataPoint {
+  date: string;
+  value: number;
+}
+
+export async function getExchangeVolumeHistory(id: string): Promise<ChartDataPoint[]> {
+  try {
+    const res = await fetch(
+      `https://api.llama.fi/summary/derivatives/${id}?dataType=dailyVolume`,
+      { next: { revalidate: 3600 } }
+    );
+    if (!res.ok) return [];
+    const data = await res.json();
+    const chart: [number, number][] = data.totalDataChart || [];
+    return chart.slice(-30).map(([ts, val]) => ({
+      date: new Date(ts * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      value: val,
+    }));
+  } catch {
+    return [];
+  }
+}
+
 export async function getTopMarkets(): Promise<Market[]> {
   try {
     const [res, hlData] = await Promise.all([

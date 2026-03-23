@@ -1,8 +1,9 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { ArrowLeft, ExternalLink, Activity, BarChart3, TrendingUp, Shield, ArrowUpRight } from 'lucide-react';
-import { getTopExchanges, getAllVenueMarkets } from '@/lib/api';
+import { getTopExchanges, getAllVenueMarkets, getExchangeVolumeHistory } from '@/lib/api';
 import HyperliquidMarketsTable from '@/components/HyperliquidMarketsTable';
+import VolumeBarChart from '@/components/VolumeBarChart';
 
 export const revalidate = 60;
 
@@ -30,11 +31,11 @@ export default async function ExchangePage({ params }: { params: Promise<{ id: s
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
   };
 
-  let hlMarkets: any[] = [];
-  if (id === 'hyperliquid' || id === '5507') {
-    const allVenueMarkets = await getAllVenueMarkets();
-    hlMarkets = allVenueMarkets.filter(m => m.venue === 'Hyperliquid');
-  }
+  const [volumeHistory, hlMarketsRaw] = await Promise.all([
+    getExchangeVolumeHistory(exchange.defillamaId),
+    (id === 'hyperliquid' || id === '5507') ? getAllVenueMarkets() : Promise.resolve([]),
+  ]);
+  const hlMarkets = hlMarketsRaw.filter(m => m.venue === 'Hyperliquid');
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-screen-2xl">
@@ -116,6 +117,15 @@ export default async function ExchangePage({ params }: { params: Promise<{ id: s
           </div>
         </div>
       </section>
+
+      {volumeHistory.length > 0 && (
+        <section className="mb-12">
+          <h2 className="text-xl font-semibold tracking-tight mb-4">Daily Volume (30d)</h2>
+          <div className="rounded-xl border border-border bg-card p-6">
+            <VolumeBarChart data={volumeHistory} />
+          </div>
+        </section>
+      )}
 
       <div className="grid gap-8 md:grid-cols-3">
         <div className="md:col-span-2 space-y-8">
