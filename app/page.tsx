@@ -4,7 +4,7 @@ import { getTopExchanges, getTopMarkets } from '@/lib/api';
 import HomepageExchangesTable from '@/components/HomepageExchangesTable';
 import HomepageMarketsTable from '@/components/HomepageMarketsTable';
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 60;
 
 export default async function Home() {
   const [exchanges, markets] = await Promise.all([

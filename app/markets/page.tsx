@@ -2,7 +2,7 @@ import { getTopMarkets, getAllVenueMarkets } from '@/lib/api';
 import MarketsTable from '@/components/MarketsTable';
 import VenueMarketsTable from '@/components/VenueMarketsTable';
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 60;
 
 export default async function MarketsPage() {
   const [markets, venueMarkets] = await Promise.all([

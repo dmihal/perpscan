@@ -1,7 +1,7 @@
 import { getTopExchanges } from '@/lib/api';
 import ExchangesTable from '@/components/ExchangesTable';
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 3600;
 
 export default async function ExchangesPage() {
   const exchanges = await getTopExchanges();

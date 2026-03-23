@@ -4,7 +4,7 @@ import { getHyperliquidAccount } from '@/lib/api';
 import PositionsTable from '@/components/PositionsTable';
 import BalancesTable from '@/components/BalancesTable';
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 10;
 
 export default async function AccountPage({ params }: { params: Promise<{ address: string }> }) {
   const { address } = await params;

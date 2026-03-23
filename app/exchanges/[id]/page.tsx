@@ -4,7 +4,7 @@ import { ArrowLeft, ExternalLink, Activity, BarChart3, TrendingUp, Shield, Arrow
 import { getTopExchanges, getAllVenueMarkets } from '@/lib/api';
 import HyperliquidMarketsTable from '@/components/HyperliquidMarketsTable';
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 60;
 
 export default async function ExchangePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;

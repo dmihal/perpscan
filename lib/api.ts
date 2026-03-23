@@ -110,7 +110,7 @@ export async function getHyperliquidContexts() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ type: "metaAndAssetCtxs" }),
-      cache: 'no-store'
+      next: { revalidate: 60 }
     });
     if (!res.ok) return null;
     return await res.json();
@@ -246,7 +246,7 @@ export async function getMarket(id: string): Promise<Market | null> {
     const found = topMarkets.find(m => m.id === id || m.symbol.toLowerCase() === id.toLowerCase());
     if (found) return found;
 
-    const searchRes = await fetch(`https://api.coingecko.com/api/v3/search?query=${id}`);
+    const searchRes = await fetch(`https://api.coingecko.com/api/v3/search?query=${id}`, { next: { revalidate: 3600 } });
     if (!searchRes.ok) return null;
     const searchData = await searchRes.json();
     if (!searchData.coins || searchData.coins.length === 0) return null;
@@ -254,7 +254,7 @@ export async function getMarket(id: string): Promise<Market | null> {
     const coinId = searchData.coins[0].id;
     
     const [coinRes, hlData] = await Promise.all([
-      fetch(`https://api.coingecko.com/api/v3/coins/${coinId}?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false&sparkline=false`),
+      fetch(`https://api.coingecko.com/api/v3/coins/${coinId}?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false&sparkline=false`, { next: { revalidate: 60 } }),
       getHyperliquidContexts()
     ]);
     
