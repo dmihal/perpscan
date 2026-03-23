@@ -1,15 +1,18 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { ArrowUpRight, Search } from 'lucide-react';
+import { ArrowUpRight, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { VenueMarket } from '@/lib/api';
 import { useSortable } from '@/hooks/use-sortable';
 import { SortableHeader } from '@/components/SortableHeader';
 
+const PAGE_SIZE = 50;
+
 export default function HyperliquidMarketsTable({ markets }: { markets: VenueMarket[] }) {
   const [filter, setFilter] = useState<'all' | 'hip3' | 'isolated' | 'cross'>('all');
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(0);
 
   const filteredMarkets = markets.filter(market => {
     if (search && !market.symbol.toLowerCase().includes(search.toLowerCase())) return false;
@@ -20,6 +23,11 @@ export default function HyperliquidMarketsTable({ markets }: { markets: VenueMar
   });
 
   const { sortedData, sortKey, sortOrder, toggleSort } = useSortable(filteredMarkets, 'volume24h');
+
+  useEffect(() => { setPage(0); }, [search, filter, sortKey, sortOrder]);
+
+  const totalPages = Math.ceil(sortedData.length / PAGE_SIZE);
+  const pageData = sortedData.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
   const formatCurrency = (value: number | undefined) => {
     if (!value) return '$0.00';
@@ -84,8 +92,8 @@ export default function HyperliquidMarketsTable({ markets }: { markets: VenueMar
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {sortedData.length > 0 ? (
-                sortedData.map((market) => (
+              {pageData.length > 0 ? (
+                pageData.map((market) => (
                   <tr key={market.id} className="hover:bg-muted/50 transition-colors">
                     <td className="px-6 py-4 font-medium">
                       <Link href={`/markets/${market.symbol.split('-')[0].toLowerCase()}`} className="flex items-center gap-2 hover:underline">
@@ -144,6 +152,31 @@ export default function HyperliquidMarketsTable({ markets }: { markets: VenueMar
           </table>
         </div>
       </div>
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between mt-4 text-sm text-muted-foreground">
+          <span>
+            Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, sortedData.length)} of {sortedData.length}
+          </span>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setPage(p => Math.max(0, p - 1))}
+              disabled={page === 0}
+              className="inline-flex items-center justify-center rounded-md h-8 w-8 transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-40 disabled:pointer-events-none"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <span className="px-2">Page {page + 1} of {totalPages}</span>
+            <button
+              onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+              disabled={page >= totalPages - 1}
+              className="inline-flex items-center justify-center rounded-md h-8 w-8 transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-40 disabled:pointer-events-none"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
