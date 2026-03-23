@@ -3,6 +3,8 @@ import Image from 'next/image';
 import { ArrowUpRight, Search } from 'lucide-react';
 import { getTopExchanges } from '@/lib/api';
 
+export const dynamic = 'force-dynamic';
+
 export default async function ExchangesPage() {
   const exchanges = await getTopExchanges();
 

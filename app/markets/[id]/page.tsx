@@ -1,12 +1,13 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { ArrowLeft, ExternalLink, Activity, BarChart3, TrendingUp, Shield } from 'lucide-react';
-import { getTopMarkets } from '@/lib/api';
+import { getMarket } from '@/lib/api';
+
+export const dynamic = 'force-dynamic';
 
 export default async function MarketPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const markets = await getTopMarkets();
-  const market = markets.find(m => m.id === id);
+  const market = await getMarket(id);
 
   if (!market) {
     return (

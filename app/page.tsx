@@ -3,6 +3,8 @@ import Image from 'next/image';
 import { ArrowRight, TrendingUp, Activity, BarChart3, Shield } from 'lucide-react';
 import { getTopExchanges, getTopMarkets } from '@/lib/api';
 
+export const dynamic = 'force-dynamic';
+
 export default async function Home() {
   const [exchanges, markets] = await Promise.all([
     getTopExchanges(),
@@ -133,7 +135,7 @@ export default async function Home() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {markets.map((market) => (
+                  {markets.slice(0, 10).map((market) => (
                     <tr key={market.id} className="hover:bg-muted/50 transition-colors">
                       <td className="px-4 py-3">
                         <Link href={`/markets/${market.id}`} className="flex items-center gap-3">

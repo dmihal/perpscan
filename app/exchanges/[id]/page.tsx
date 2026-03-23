@@ -1,12 +1,15 @@
 import Image from 'next/image';
 import Link from 'next/link';
-import { ArrowLeft, ExternalLink, Activity, BarChart3, TrendingUp, Shield } from 'lucide-react';
-import { getTopExchanges } from '@/lib/api';
+import { ArrowLeft, ExternalLink, Activity, BarChart3, TrendingUp, Shield, ArrowUpRight } from 'lucide-react';
+import { getTopExchanges, getAllVenueMarkets } from '@/lib/api';
+import HyperliquidMarketsTable from '@/components/HyperliquidMarketsTable';
+
+export const dynamic = 'force-dynamic';
 
 export default async function ExchangePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const exchanges = await getTopExchanges();
-  const exchange = exchanges.find(ex => ex.defillamaId === id);
+  const exchange = exchanges.find(ex => ex.defillamaId === id || (id === '5507' && ex.defillamaId === 'hyperliquid'));
 
   if (!exchange) {
     return (
@@ -26,6 +29,12 @@ export default async function ExchangePage({ params }: { params: Promise<{ id: s
     if (value >= 1e6) return `$${(value / 1e6).toFixed(2)}M`;
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
   };
+
+  let hlMarkets: any[] = [];
+  if (id === 'hyperliquid' || id === '5507') {
+    const allVenueMarkets = await getAllVenueMarkets();
+    hlMarkets = allVenueMarkets.filter(m => m.venue === 'Hyperliquid');
+  }
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-screen-2xl">
@@ -122,13 +131,17 @@ export default async function ExchangePage({ params }: { params: Promise<{ id: s
           </section>
 
           <section>
-            <h2 className="text-2xl font-bold tracking-tight mb-4">Top Markets on {exchange.name}</h2>
-            <div className="rounded-xl border border-border bg-card overflow-hidden">
-              <div className="p-8 text-center text-muted-foreground">
-                <p>Market data for individual exchanges is currently being aggregated.</p>
-                <p className="text-sm mt-2">Check back soon for detailed order books and price charts.</p>
+            <h2 className="text-2xl font-bold tracking-tight mb-4">Markets on {exchange.name}</h2>
+            {(id === 'hyperliquid' || id === '5507') && hlMarkets.length > 0 ? (
+              <HyperliquidMarketsTable markets={hlMarkets} />
+            ) : (
+              <div className="rounded-xl border border-border bg-card overflow-hidden">
+                <div className="p-8 text-center text-muted-foreground">
+                  <p>Market data for individual exchanges is currently being aggregated.</p>
+                  <p className="text-sm mt-2">Check back soon for detailed order books and price charts.</p>
+                </div>
               </div>
-            </div>
+            )}
           </section>
         </div>
 
