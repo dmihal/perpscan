@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { ArrowLeft, ExternalLink, Activity, BarChart3, TrendingUp, Shield } from 'lucide-react';
 import { getMarket } from '@/lib/api';
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 60;
 
 export default async function MarketPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;

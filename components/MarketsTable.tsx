@@ -57,7 +57,7 @@ export default function MarketsTable({ markets }: { markets: Market[] }) {
                 sortedData.map(market => (
                   <tr key={market.id} className="hover:bg-muted/50 transition-colors">
                     <td className="px-6 py-4">
-                      <Link href={`/markets/${market.id}`} className="flex items-center gap-3">
+                      <Link href={`/assets/${market.symbol.toLowerCase()}`} className="flex items-center gap-3">
                         {market.image && (
                           <Image
                             src={market.image}
@@ -89,7 +89,7 @@ export default function MarketsTable({ markets }: { markets: Market[] }) {
                     </td>
                     <td className="px-6 py-4 text-right">
                       <Link
-                        href={`/markets/${market.id}`}
+                        href={`/assets/${market.symbol.toLowerCase()}`}
                         className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring hover:bg-accent hover:text-accent-foreground h-9 w-9"
                       >
                         <ArrowUpRight className="h-4 w-4" />

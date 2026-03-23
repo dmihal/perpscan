@@ -25,7 +25,7 @@ export default function HomepageMarketsTable({ markets }: { markets: Market[] })
             {sortedData.map(market => (
               <tr key={market.id} className="hover:bg-muted/50 transition-colors">
                 <td className="px-4 py-3">
-                  <Link href={`/markets/${market.id}`} className="flex items-center gap-3">
+                  <Link href={`/assets/${market.symbol.toLowerCase()}`} className="flex items-center gap-3">
                     {market.image && (
                       <Image src={market.image} alt={market.name} width={24} height={24} className="rounded-full" referrerPolicy="no-referrer" />
                     )}
