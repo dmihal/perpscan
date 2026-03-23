@@ -2,26 +2,24 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { ArrowUpRight, Search, Filter } from 'lucide-react';
+import { ArrowUpRight, Search } from 'lucide-react';
 import { VenueMarket } from '@/lib/api';
+import { useSortable } from '@/hooks/use-sortable';
+import { SortableHeader } from '@/components/SortableHeader';
 
 export default function HyperliquidMarketsTable({ markets }: { markets: VenueMarket[] }) {
   const [filter, setFilter] = useState<'all' | 'hip3' | 'isolated' | 'cross'>('all');
   const [search, setSearch] = useState('');
 
   const filteredMarkets = markets.filter(market => {
-    // Search filter
-    if (search && !market.symbol.toLowerCase().includes(search.toLowerCase())) {
-      return false;
-    }
-
-    // Category filter
+    if (search && !market.symbol.toLowerCase().includes(search.toLowerCase())) return false;
     if (filter === 'hip3' && !market.isHip3) return false;
     if (filter === 'isolated' && !market.onlyIsolated) return false;
-    if (filter === 'cross' && market.onlyIsolated) return false; // Cross margin means NOT onlyIsolated
-
+    if (filter === 'cross' && market.onlyIsolated) return false;
     return true;
   });
+
+  const { sortedData, sortKey, sortOrder, toggleSort } = useSortable(filteredMarkets, 'volume24h');
 
   const formatCurrency = (value: number | undefined) => {
     if (!value) return '$0.00';
@@ -76,18 +74,18 @@ export default function HyperliquidMarketsTable({ markets }: { markets: VenueMar
           <table className="w-full text-sm text-left">
             <thead className="text-xs text-muted-foreground uppercase bg-secondary/50 border-b border-border">
               <tr>
-                <th className="px-6 py-4 font-medium">Market</th>
+                <SortableHeader label="Market" sortKey="symbol" currentSortKey={sortKey} sortOrder={sortOrder} onSort={toggleSort} />
                 <th className="px-6 py-4 font-medium">Tags</th>
-                <th className="px-6 py-4 font-medium text-right">Price</th>
-                <th className="px-6 py-4 font-medium text-right">24h Volume</th>
-                <th className="px-6 py-4 font-medium text-right">Open Interest</th>
-                <th className="px-6 py-4 font-medium text-right">Avg Spread</th>
+                <SortableHeader label="Price" sortKey="price" currentSortKey={sortKey} sortOrder={sortOrder} onSort={toggleSort} align="right" />
+                <SortableHeader label="24h Volume" sortKey="volume24h" currentSortKey={sortKey} sortOrder={sortOrder} onSort={toggleSort} align="right" />
+                <SortableHeader label="Open Interest" sortKey="openInterest" currentSortKey={sortKey} sortOrder={sortOrder} onSort={toggleSort} align="right" />
+                <SortableHeader label="Avg Spread" sortKey="spread" currentSortKey={sortKey} sortOrder={sortOrder} onSort={toggleSort} align="right" />
                 <th className="px-6 py-4 font-medium text-right"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {filteredMarkets.length > 0 ? (
-                filteredMarkets.map((market) => (
+              {sortedData.length > 0 ? (
+                sortedData.map((market) => (
                   <tr key={market.id} className="hover:bg-muted/50 transition-colors">
                     <td className="px-6 py-4 font-medium">
                       <Link href={`/markets/${market.symbol.split('-')[0].toLowerCase()}`} className="flex items-center gap-2 hover:underline">

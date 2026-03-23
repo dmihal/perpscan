@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import { ArrowLeft, Wallet, ExternalLink, Activity, Shield, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { getHyperliquidAccount } from '@/lib/api';
+import PositionsTable from '@/components/PositionsTable';
+import BalancesTable from '@/components/BalancesTable';
 
 export const dynamic = 'force-dynamic';
 
@@ -164,76 +166,12 @@ export default async function AccountPage({ params }: { params: Promise<{ addres
       <div className="space-y-8">
         <section>
           <h2 className="text-2xl font-bold tracking-tight mb-4">Open Positions</h2>
-          <div className="rounded-xl border border-border bg-card overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm text-left">
-                <thead className="text-xs text-muted-foreground uppercase bg-secondary/50 border-b border-border">
-                  <tr>
-                    <th className="px-6 py-4 font-medium">Exchange</th>
-                    <th className="px-6 py-4 font-medium">Market</th>
-                    <th className="px-6 py-4 font-medium">Side</th>
-                    <th className="px-6 py-4 font-medium text-right">Size</th>
-                    <th className="px-6 py-4 font-medium text-right">Entry Price</th>
-                    <th className="px-6 py-4 font-medium text-right">Mark Price</th>
-                    <th className="px-6 py-4 font-medium text-right">Unrealized PnL</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {accountData.positions.map((pos) => (
-                    <tr key={pos.id} className="hover:bg-muted/50 transition-colors">
-                      <td className="px-6 py-4 font-medium">
-                        <Link href={`/exchanges/${pos.exchange.toLowerCase()}/accounts/${address}`} className="text-primary hover:underline">
-                          {pos.exchange}
-                        </Link>
-                      </td>
-                      <td className="px-6 py-4 font-medium">{pos.market}</td>
-                      <td className="px-6 py-4">
-                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${pos.side === 'Long' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-destructive/10 text-destructive'}`}>
-                          {pos.side} {pos.leverage}x
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-right font-mono">{pos.size}</td>
-                      <td className="px-6 py-4 text-right font-mono">{formatCurrency(pos.entryPrice)}</td>
-                      <td className="px-6 py-4 text-right font-mono">{formatCurrency(pos.markPrice)}</td>
-                      <td className={`px-6 py-4 text-right font-mono font-medium ${pos.pnl >= 0 ? 'text-emerald-500' : 'text-destructive'}`}>
-                        {pos.pnl >= 0 ? '+' : ''}{formatCurrency(pos.pnl)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <PositionsTable positions={accountData.positions} address={address} />
         </section>
 
         <section>
           <h2 className="text-2xl font-bold tracking-tight mb-4">Balances</h2>
-          <div className="rounded-xl border border-border bg-card overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm text-left">
-                <thead className="text-xs text-muted-foreground uppercase bg-secondary/50 border-b border-border">
-                  <tr>
-                    <th className="px-6 py-4 font-medium">Exchange</th>
-                    <th className="px-6 py-4 font-medium">Asset</th>
-                    <th className="px-6 py-4 font-medium text-right">Amount</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {accountData.balances.map((bal, idx) => (
-                    <tr key={idx} className="hover:bg-muted/50 transition-colors">
-                      <td className="px-6 py-4 font-medium">
-                        <Link href={`/exchanges/${bal.exchange.toLowerCase()}/accounts/${address}`} className="text-primary hover:underline">
-                          {bal.exchange}
-                        </Link>
-                      </td>
-                      <td className="px-6 py-4">{bal.asset}</td>
-                      <td className="px-6 py-4 text-right font-mono">{formatCurrency(bal.amount)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <BalancesTable balances={accountData.balances} address={address} />
         </section>
       </div>
     </div>
