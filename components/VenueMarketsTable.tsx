@@ -88,7 +88,7 @@ export default function VenueMarketsTable({ markets }: { markets: VenueMarket[] 
                 pageData.map(market => (
                   <tr key={market.id} className="hover:bg-muted/50 transition-colors">
                     <td className="px-6 py-4">
-                      <Link href={`/markets/${market.symbol.split('-')[0].toLowerCase()}`} className="font-medium text-base hover:underline">
+                      <Link href={`/exchanges/${market.venue.toLowerCase()}/markets/${market.symbol.split('-')[0].toLowerCase()}`} className="font-medium text-base hover:underline">
                         {market.symbol}
                       </Link>
                     </td>
@@ -114,7 +114,7 @@ export default function VenueMarketsTable({ markets }: { markets: VenueMarket[] 
                     </td>
                     <td className="px-6 py-4 text-right">
                       <Link
-                        href={`/markets/${market.symbol.split('-')[0].toLowerCase()}`}
+                        href={`/exchanges/${market.venue.toLowerCase()}/markets/${market.symbol.split('-')[0].toLowerCase()}`}
                         className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring hover:bg-accent hover:text-accent-foreground h-9 w-9"
                       >
                         <ArrowUpRight className="h-4 w-4" />

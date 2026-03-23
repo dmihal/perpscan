@@ -218,6 +218,47 @@ export async function getExchangeVolumeHistory(id: string): Promise<ChartDataPoi
   }
 }
 
+export async function getHyperliquidCandles(coin: string, interval: string = '1d', days: number = 30): Promise<ChartDataPoint[]> {
+  try {
+    const endTime = Date.now();
+    const startTime = endTime - days * 24 * 60 * 60 * 1000;
+    const res = await fetch("https://api.hyperliquid.xyz/info", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "candleSnapshot", req: { coin, interval, startTime, endTime } }),
+      next: { revalidate: 300 }
+    });
+    if (!res.ok) return [];
+    const candles: { t: number; c: string }[] = await res.json();
+    return candles.map(c => ({
+      date: new Date(c.t).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      value: parseFloat(c.c),
+    }));
+  } catch {
+    return [];
+  }
+}
+
+export async function getHyperliquidFundingHistory(coin: string, days: number = 30): Promise<ChartDataPoint[]> {
+  try {
+    const startTime = Date.now() - days * 24 * 60 * 60 * 1000;
+    const res = await fetch("https://api.hyperliquid.xyz/info", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "fundingHistory", coin, startTime }),
+      next: { revalidate: 300 }
+    });
+    if (!res.ok) return [];
+    const history: { time: number; coin: string; fundingRate: string }[] = await res.json();
+    return history.map(h => ({
+      date: new Date(h.time).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit' }),
+      value: parseFloat(h.fundingRate) * 100,
+    }));
+  } catch {
+    return [];
+  }
+}
+
 export async function getTopMarkets(): Promise<Market[]> {
   try {
     const [res, hlData] = await Promise.all([
