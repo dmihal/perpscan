@@ -1,5 +1,6 @@
 import Link from 'next/link';
-import { Activity, Search, Menu } from 'lucide-react';
+import { Activity, Menu } from 'lucide-react';
+import GlobalSearch from '@/components/GlobalSearch';
 
 export function Navbar() {
   return (
@@ -38,16 +39,7 @@ export function Navbar() {
           <span className="sr-only">Toggle Menu</span>
         </button>
         <div className="flex flex-1 items-center justify-between space-x-2 md:justify-end">
-          <div className="w-full flex-1 md:w-auto md:flex-none">
-            <div className="relative">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <input
-                type="search"
-                placeholder="Search exchanges, markets, or accounts..."
-                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 pl-8 sm:w-[300px] md:w-[200px] lg:w-[300px]"
-              />
-            </div>
-          </div>
+          <GlobalSearch />
         </div>
       </div>
     </header>
