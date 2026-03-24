@@ -75,14 +75,14 @@ These tasks make every existing page production-quality before adding new pages 
 
 ### 2.3 Navigation & Cross-Linking
 - [x] Exchange markets table: each row links to `/exchanges/[id]/markets/[symbol]`
-- [ ] Account positions table: each market cell links to `/exchanges/[id]/markets/[symbol]`
+- [x] Account positions table: each market cell links to `/exchanges/[id]/markets/[symbol]`
 - [x] Exchange-specific market detail page: secondary link to `/assets/[symbol]` for cross-exchange view
 - [x] Asset overview page: each exchange row links to `/exchanges/[id]/markets/[symbol]`
 - [x] Homepage tables: proper deep links to all relevant pages
 
 ### 2.4 Global Search Bar
 - [x] Build a search input component in the top navigation bar (visible on all pages)
-- [ ] Implement dropdown with categorized results:
+- [x] Implement dropdown with categorized results:
   - [x] Account addresses: detect `0x` prefix, link to `/accounts/[address]`
   - [x] Exchanges: fuzzy-match against exchange names, link to `/exchanges/[id]`
   - [x] Assets/Markets: match against known symbols/names, show both asset overview and exchange-specific market links
@@ -193,7 +193,7 @@ Each integration follows the same pattern:
 - [ ] Clean up unused mock data references (dYdX, Synthetix, Kwenta, Polynomial)
 - [ ] Remove or repurpose Gemini API integration (unused)
 - [ ] Add proper error boundaries and loading states
-- [ ] SEO: meta titles, descriptions for all pages
+- [x] SEO: meta titles, descriptions for all pages
 
 ---
 

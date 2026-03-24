@@ -51,7 +51,11 @@ export default function PositionsTable({
                     {pos.exchange}
                   </Link>
                 </td>
-                <td className="px-6 py-4 font-medium">{pos.market}</td>
+                <td className="px-6 py-4 font-medium">
+                  <Link href={`/exchanges/${pos.exchange.toLowerCase()}/markets/${pos.market.split('-')[0].toLowerCase()}`} className="hover:underline">
+                    {pos.market}
+                  </Link>
+                </td>
                 <td className="px-6 py-4">
                   <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${pos.side === 'Long' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-destructive/10 text-destructive'}`}>
                     {pos.side} {pos.leverage}x
