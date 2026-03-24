@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
 import { ArrowLeft, ArrowUpRight } from 'lucide-react';
@@ -6,6 +7,15 @@ import PriceLineChart from '@/components/PriceLineChart';
 import FundingRateChart from '@/components/FundingRateChart';
 
 export const revalidate = 60;
+
+export async function generateMetadata({ params }: { params: Promise<{ symbol: string }> }): Promise<Metadata> {
+  const { symbol } = await params;
+  const coin = symbol.toUpperCase();
+  return {
+    title: `${coin} Perpetual Markets — Perp Scan`,
+    description: `Compare ${coin}-USD perpetual markets across decentralized exchanges with funding rates, volume, and open interest.`,
+  };
+}
 
 export default async function AssetPage({ params }: { params: Promise<{ symbol: string }> }) {
   const { symbol } = await params;

@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ArrowLeft, Activity, BarChart3, TrendingUp, Shield, Percent, ArrowUpRight } from 'lucide-react';
 import { getAllVenueMarkets, getHyperliquidCandles, getHyperliquidFundingHistory, getTopExchanges } from '@/lib/api';
@@ -5,6 +6,17 @@ import PriceLineChart from '@/components/PriceLineChart';
 import FundingRateChart from '@/components/FundingRateChart';
 
 export const revalidate = 60;
+
+export async function generateMetadata({ params }: { params: Promise<{ id: string; symbol: string }> }): Promise<Metadata> {
+  const { id, symbol } = await params;
+  const coin = symbol.toUpperCase();
+  const exchanges = await getTopExchanges();
+  const exchange = exchanges.find(ex => ex.defillamaId === id || (id === '5507' && ex.defillamaId === 'hyperliquid'));
+  return {
+    title: `${coin}-USD on ${exchange?.name || id} — Perp Scan`,
+    description: `${coin}-USD perpetual market stats, price chart, and funding rate history on ${exchange?.name || id}.`,
+  };
+}
 
 export default async function ExchangeMarketPage({ params }: { params: Promise<{ id: string; symbol: string }> }) {
   const { id, symbol } = await params;

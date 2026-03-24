@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
 import { ArrowLeft, ExternalLink, Activity, BarChart3, TrendingUp, Shield, ArrowUpRight } from 'lucide-react';
@@ -6,6 +7,16 @@ import HyperliquidMarketsTable from '@/components/HyperliquidMarketsTable';
 import VolumeBarChart from '@/components/VolumeBarChart';
 
 export const revalidate = 60;
+
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const { id } = await params;
+  const exchanges = await getTopExchanges();
+  const exchange = exchanges.find(ex => ex.defillamaId === id || (id === '5507' && ex.defillamaId === 'hyperliquid'));
+  return {
+    title: exchange ? `${exchange.name} — Perp Scan` : 'Exchange — Perp Scan',
+    description: exchange ? `View ${exchange.name} perpetual markets, volume, and open interest on Perp Scan.` : 'Exchange details on Perp Scan.',
+  };
+}
 
 export default async function ExchangePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;

@@ -1,7 +1,13 @@
+import type { Metadata } from 'next';
 import { getTopExchanges } from '@/lib/api';
 import ExchangesTable from '@/components/ExchangesTable';
 
 export const revalidate = 3600;
+
+export const metadata: Metadata = {
+  title: 'Perpetual DEX Rankings — Perp Scan',
+  description: 'Compare decentralized perpetual exchanges by volume, open interest, and market coverage.',
+};
 
 export default async function ExchangesPage() {
   const exchanges = await getTopExchanges();

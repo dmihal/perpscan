@@ -1,7 +1,7 @@
 # Perpscan Build Plan
 
 **Last updated**: 2026-03-23
-**Overall progress**: ~65% of PRD implemented
+**Overall progress**: ~75% of PRD implemented
 
 ---
 
@@ -81,15 +81,15 @@ These tasks make every existing page production-quality before adding new pages 
 - [x] Homepage tables: proper deep links to all relevant pages
 
 ### 2.4 Global Search Bar
-- [ ] Build a search input component in the top navigation bar (visible on all pages)
+- [x] Build a search input component in the top navigation bar (visible on all pages)
 - [ ] Implement dropdown with categorized results:
-  - [ ] Account addresses: detect `0x` prefix, link to `/accounts/[address]`
-  - [ ] Exchanges: fuzzy-match against exchange names, link to `/exchanges/[id]`
-  - [ ] Assets/Markets: match against known symbols/names, show both asset overview and exchange-specific market links
-- [ ] Group results by category with section headers
-- [ ] Keyboard navigation (arrow keys + enter)
-- [ ] Dismiss on blur / Escape
-- [ ] Data sources: `getTopExchanges()` + `getAllVenueMarkets()` (cached, client-side filtering)
+  - [x] Account addresses: detect `0x` prefix, link to `/accounts/[address]`
+  - [x] Exchanges: fuzzy-match against exchange names, link to `/exchanges/[id]`
+  - [x] Assets/Markets: match against known symbols/names, show both asset overview and exchange-specific market links
+- [x] Group results by category with section headers
+- [x] Keyboard navigation (arrow keys + enter)
+- [x] Dismiss on blur / Escape
+- [x] Data sources: `getTopExchanges()` + `getAllVenueMarkets()` (cached, client-side filtering)
 
 ---
 
@@ -163,10 +163,10 @@ Each integration follows the same pattern:
 ## Phase 4: Account Page Enhancements
 
 ### 4.1 Trade History
-- [ ] Fetch real trade history from Hyperliquid API (fills endpoint)
-- [ ] Display in trade history table on account page
+- [x] Fetch real trade history from Hyperliquid API (fills endpoint)
+- [x] Display in trade history table on account page
 - [ ] Add exchange filter for trade history
-- [ ] Paginate trade history results
+- [x] Paginate trade history results
 
 ### 4.2 Subaccounts
 - [ ] Check which exchanges support subaccounts via API
@@ -175,9 +175,9 @@ Each integration follows the same pattern:
 - [ ] Show per-subaccount positions and balances
 
 ### 4.3 Account Page Polish
-- [ ] Add data status indicators per exchange (live vs failed vs not supported)
-- [ ] Remove mock data for exchanges that aren't integrated (only show real data)
-- [ ] Clean up exchange list on `/accounts` page to only show actually supported exchanges
+- [x] Add data status indicators per exchange (live vs failed vs not supported)
+- [x] Remove mock data for exchanges that aren't integrated (only show real data)
+- [x] Clean up exchange list on `/accounts` page to only show actually supported exchanges
 
 ---
 
