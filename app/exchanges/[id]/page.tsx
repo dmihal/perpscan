@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { ArrowLeft, ExternalLink, Activity, BarChart3, TrendingUp, Shield, ArrowUpRight } from 'lucide-react';
 import { getTopExchanges, getAllVenueMarkets, getExchangeVolumeHistory } from '@/lib/api';
 import HyperliquidMarketsTable from '@/components/HyperliquidMarketsTable';
+import VenueMarketsTable from '@/components/VenueMarketsTable';
 import VolumeBarChart from '@/components/VolumeBarChart';
 
 export const revalidate = 60;
@@ -42,11 +43,19 @@ export default async function ExchangePage({ params }: { params: Promise<{ id: s
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
   };
 
-  const [volumeHistory, hlMarketsRaw] = await Promise.all([
+  const venueNameMap: Record<string, string> = {
+    'hyperliquid': 'Hyperliquid',
+    '5507': 'Hyperliquid',
+    'paradex': 'Paradex',
+  };
+  const venueName = venueNameMap[id] || exchange.name;
+  const hasIntegration = id in venueNameMap;
+
+  const [volumeHistory, allMarketsRaw] = await Promise.all([
     getExchangeVolumeHistory(exchange.defillamaId),
-    (id === 'hyperliquid' || id === '5507') ? getAllVenueMarkets() : Promise.resolve([]),
+    hasIntegration ? getAllVenueMarkets() : Promise.resolve([]),
   ]);
-  const hlMarkets = hlMarketsRaw.filter(m => m.venue === 'Hyperliquid');
+  const venueMarkets = allMarketsRaw.filter(m => m.venue === venueName);
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-screen-2xl">
@@ -153,8 +162,10 @@ export default async function ExchangePage({ params }: { params: Promise<{ id: s
 
           <section>
             <h2 className="text-2xl font-bold tracking-tight mb-4">Markets on {exchange.name}</h2>
-            {(id === 'hyperliquid' || id === '5507') && hlMarkets.length > 0 ? (
-              <HyperliquidMarketsTable markets={hlMarkets} />
+            {(id === 'hyperliquid' || id === '5507') && venueMarkets.length > 0 ? (
+              <HyperliquidMarketsTable markets={venueMarkets} />
+            ) : venueMarkets.length > 0 ? (
+              <VenueMarketsTable markets={venueMarkets} />
             ) : (
               <div className="rounded-xl border border-border bg-card overflow-hidden">
                 <div className="p-8 text-center text-muted-foreground">

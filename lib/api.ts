@@ -55,7 +55,7 @@ export async function getHyperliquidSpotMeta() {
   }
 }
 
-export async function getAllVenueMarkets(): Promise<VenueMarket[]> {
+async function getHyperliquidMarkets(): Promise<VenueMarket[]> {
   try {
     const [hlData, spotMeta] = await Promise.all([
       getHyperliquidContexts(),
@@ -65,7 +65,7 @@ export async function getAllVenueMarkets(): Promise<VenueMarket[]> {
 
     const meta = hlData[0].universe;
     const ctxs = hlData[1];
-    
+
     const spotTokens = new Set<string>();
     if (spotMeta && spotMeta.tokens) {
       spotMeta.tokens.forEach((t: any) => spotTokens.add(t.name));
@@ -89,14 +89,82 @@ export async function getAllVenueMarkets(): Promise<VenueMarket[]> {
           volume24h: parseFloat(ctx.dayNtlVlm || "0"),
           openInterest: parseFloat(ctx.openInterest || "0") * parseFloat(ctx.markPx || "0"),
           spread: spread,
-          fundingRate: parseFloat(ctx.funding || "0") * 100, // Convert to percentage
+          fundingRate: parseFloat(ctx.funding || "0") * 100,
           isHip3: spotTokens.has(m.name),
           onlyIsolated: !!m.onlyIsolated
         });
       }
     });
 
-    // Sort by 24h volume descending
+    return markets;
+  } catch (error) {
+    console.error('Hyperliquid markets error:', error);
+    return [];
+  }
+}
+
+async function getParadexMarkets(): Promise<VenueMarket[]> {
+  try {
+    const res = await fetch('https://api.prod.paradex.trade/v1/markets/summary?market=ALL', {
+      next: { revalidate: 60 }
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    const results: any[] = data.results || [];
+
+    return results.map((m: any) => {
+      const markPrice = parseFloat(m.mark_price || "0");
+      const bid = parseFloat(m.bid || "0");
+      const ask = parseFloat(m.ask || "0");
+      const spread = markPrice > 0 ? ((ask - bid) / markPrice) * 100 : 0;
+      const coin = m.symbol.replace('-USD-PERP', '');
+
+      return {
+        id: `paradex-${coin.toLowerCase()}`,
+        venue: 'Paradex',
+        symbol: `${coin}-USD`,
+        price: markPrice,
+        volume24h: parseFloat(m.volume_24h || "0"),
+        openInterest: parseFloat(m.open_interest || "0") * markPrice,
+        spread: Math.abs(spread),
+        fundingRate: parseFloat(m.funding_rate || "0") * 100,
+      };
+    });
+  } catch (error) {
+    console.error('Paradex markets error:', error);
+    return [];
+  }
+}
+
+export async function getParadexCandles(coin: string, days: number = 30): Promise<ChartDataPoint[]> {
+  try {
+    const endTime = Date.now();
+    const startTime = endTime - days * 24 * 60 * 60 * 1000;
+    const res = await fetch(
+      `https://api.prod.paradex.trade/v1/markets/klines?symbol=${coin}-USD-PERP&resolution=60&start_at=${startTime}&end_at=${endTime}`,
+      { next: { revalidate: 300 } }
+    );
+    if (!res.ok) return [];
+    const data = await res.json();
+    const candles: number[][] = data.results || [];
+    // Take daily samples (every 24 entries for hourly candles)
+    return candles.filter((_, i) => i % 24 === 0).map(c => ({
+      date: new Date(c[0]).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      value: c[4], // close price
+    }));
+  } catch {
+    return [];
+  }
+}
+
+export async function getAllVenueMarkets(): Promise<VenueMarket[]> {
+  try {
+    const [hlMarkets, paradexMarkets] = await Promise.all([
+      getHyperliquidMarkets(),
+      getParadexMarkets(),
+    ]);
+
+    const markets = [...hlMarkets, ...paradexMarkets];
     return markets.sort((a, b) => b.volume24h - a.volume24h);
   } catch (error) {
     console.error(error);

@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ArrowLeft, Activity, BarChart3, TrendingUp, Shield, Percent, ArrowUpRight } from 'lucide-react';
-import { getAllVenueMarkets, getHyperliquidCandles, getHyperliquidFundingHistory, getTopExchanges } from '@/lib/api';
+import { getAllVenueMarkets, getHyperliquidCandles, getHyperliquidFundingHistory, getParadexCandles, getTopExchanges } from '@/lib/api';
 import PriceLineChart from '@/components/PriceLineChart';
 import FundingRateChart from '@/components/FundingRateChart';
 
@@ -26,18 +26,20 @@ export default async function ExchangeMarketPage({ params }: { params: Promise<{
   const exchange = exchanges.find(ex => ex.defillamaId === id || (id === '5507' && ex.defillamaId === 'hyperliquid'));
 
   const isHyperliquid = id === 'hyperliquid' || id === '5507';
+  const isParadex = id === 'paradex';
 
   const [allMarkets, priceHistory, fundingHistory] = await Promise.all([
     getAllVenueMarkets(),
-    isHyperliquid ? getHyperliquidCandles(coin) : Promise.resolve([]),
+    isHyperliquid ? getHyperliquidCandles(coin) : isParadex ? getParadexCandles(coin) : Promise.resolve([]),
     isHyperliquid ? getHyperliquidFundingHistory(coin) : Promise.resolve([]),
   ]);
 
+  const venueName = exchange?.name || id.charAt(0).toUpperCase() + id.slice(1);
   const market = allMarkets.find(
-    m => m.venue === (exchange?.name || '') && m.symbol.toLowerCase() === `${coin.toLowerCase()}-usd`
+    m => m.venue.toLowerCase() === venueName.toLowerCase() && m.symbol.toLowerCase() === `${coin.toLowerCase()}-usd`
   );
 
-  if (!market || !exchange) {
+  if (!market) {
     return (
       <div className="container mx-auto px-4 py-16 text-center">
         <h1 className="text-3xl font-bold mb-4">Market Not Found</h1>
@@ -62,7 +64,7 @@ export default async function ExchangeMarketPage({ params }: { params: Promise<{
     <div className="container mx-auto px-4 py-8 max-w-screen-2xl">
       <Link href={`/exchanges/${id}`} className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground mb-8 transition-colors">
         <ArrowLeft className="mr-2 h-4 w-4" />
-        Back to {exchange.name}
+        Back to {exchange?.name || venueName}
       </Link>
 
       <div className="flex flex-col md:flex-row md:items-start justify-between gap-8 mb-12">
@@ -70,7 +72,7 @@ export default async function ExchangeMarketPage({ params }: { params: Promise<{
           <h1 className="text-4xl font-bold tracking-tight mb-2">{market.symbol}</h1>
           <div className="flex items-center gap-3 text-sm text-muted-foreground">
             <span className="inline-flex items-center rounded-full border border-border px-2.5 py-0.5 text-xs font-semibold bg-secondary text-secondary-foreground">
-              {exchange.name}
+              {exchange?.name || venueName}
             </span>
             {market.isHip3 && (
               <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold border-transparent bg-indigo-500/10 text-indigo-500">

@@ -149,11 +149,11 @@ Each integration follows the same pattern:
 - [ ] Test with real addresses
 
 ### 3.6 Paradex (Starknet)
-- [ ] Research Paradex API — determine address format (Starknet L2 vs EVM abstraction)
-- [ ] Implement market data fetching
-- [ ] Implement account position fetching (Starknet address handling)
-- [ ] Implement trade history fetching
-- [ ] Add to exchange detail page
+- [x] Research Paradex API — determine address format (Starknet L2 vs EVM abstraction)
+- [x] Implement market data fetching
+- [ ] Implement account position fetching (Starknet address handling — requires JWT auth)
+- [ ] Implement trade history fetching (requires JWT auth)
+- [x] Add to exchange detail page
 - [ ] Add to account detail page
 - [ ] Handle address format differences in account search UI
 - [ ] Test with real Paradex addresses
@@ -211,8 +211,43 @@ _(Updated by the build agent as it works)_
 
 ---
 
+## Exchange API Research
+
+### Paradex (Starknet) — READY TO INTEGRATE
+- **Base URL:** `https://api.prod.paradex.trade/v1`
+- **Auth:** None required for public endpoints
+- **Market list:** `GET /markets` → 87 perp markets, returns symbol, base/quote currency, fees, position limits
+- **Market summary:** `GET /markets/summary?market=ALL` → mark_price, bid, ask, volume_24h, open_interest, funding_rate per market
+- **Candles:** `GET /markets/klines?symbol=BTC-USD-PERP&resolution=60&start_at=<ms>&end_at=<ms>` → OHLCV arrays
+- **Funding:** Available in market summary (current rate); historical funding via `/markets/funding-data`
+- **Account/positions:** `GET /account/positions` — requires JWT auth (Starknet signature)
+- **Trade history:** `GET /account/fills` — requires JWT auth
+- **Address format:** Starknet L2 addresses (not EVM)
+- **Notes:** Market data is fully public. Account data requires Paradex-specific auth flow with Starknet keys. Symbol format: `BTC-USD-PERP`
+
+### GMX v2 (Arbitrum) — PARTIALLY AVAILABLE
+- **Price API:** `https://arbitrum-api.gmxinfra.io/prices/tickers` → token prices (120 tokens)
+- **Signed prices:** `https://arbitrum-api.gmxinfra.io/signed_prices/latest` → oracle prices with token addresses
+- **Volume/OI:** Not available via simple REST — requires subgraph queries or on-chain reads
+- **Account data:** On-chain only (no REST API for positions)
+- **Notes:** GMX v2 is heavily on-chain. Market data requires combining multiple data sources (subgraph for volume/OI, oracle for prices). More complex integration than Paradex.
+
+### Ostium — NEEDS MORE RESEARCH
+- No public API found at `api.ostium.io`
+- Likely subgraph-based or on-chain only
+
+### Lighter — NEEDS MORE RESEARCH
+- Check `docs.lighter.xyz` for REST API or SDK documentation
+
+### Pacifica / Aster — NEEDS MORE RESEARCH
+- Newer protocols, documentation not yet confirmed
+
+---
+
 ## Issues & Blockers
 
 _(Updated by the build agent as it encounters problems)_
 
-_None yet._
+- GMX v2 integration is complex — no single REST endpoint for volume/OI. May need subgraph integration.
+- Paradex account data requires Starknet signature auth — market data only for now.
+- Ostium/Lighter/Pacifica/Aster APIs not yet confirmed — need web search access to find docs.
