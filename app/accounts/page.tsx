@@ -57,10 +57,10 @@ export default function AccountsPage() {
         <div className="rounded-xl border border-border bg-card p-6">
           <h3 className="font-semibold mb-2">Supported Exchanges</h3>
           <p className="text-sm text-muted-foreground mb-4">
-            We currently track positions and balances across the following major EVM-compatible perpetual DEXs.
+            We currently track positions and balances on Hyperliquid. More exchanges coming soon.
           </p>
           <div className="flex flex-wrap gap-2">
-            {['Hyperliquid', 'dYdX', 'GMX', 'Synthetix', 'Kwenta', 'Polynomial'].map(ex => (
+            {['Hyperliquid'].map(ex => (
               <span key={ex} className="inline-flex items-center rounded-full border border-border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 bg-secondary text-secondary-foreground">
                 {ex}
               </span>

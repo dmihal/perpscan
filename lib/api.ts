@@ -136,6 +136,33 @@ export async function getHyperliquidAccount(address: string) {
   }
 }
 
+export interface Fill {
+  coin: string;
+  side: string;
+  px: string;
+  sz: string;
+  time: number;
+  fee: string;
+  closedPnl: string;
+  dir: string;
+}
+
+export async function getHyperliquidFills(address: string, limit: number = 100): Promise<Fill[]> {
+  try {
+    const res = await fetch("https://api.hyperliquid.xyz/info", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "userFills", user: address }),
+      next: { revalidate: 30 }
+    });
+    if (!res.ok) return [];
+    const fills: Fill[] = await res.json();
+    return fills.slice(0, limit);
+  } catch {
+    return [];
+  }
+}
+
 export async function getTopExchanges(): Promise<Protocol[]> {
   try {
     const [res, hlData] = await Promise.all([
