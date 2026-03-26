@@ -252,9 +252,11 @@ Perpscan is also an internal debugging and monitoring tool for the team's own pe
 - Exchange, asset, balance
 - Shows per-exchange collateral balances
 
-**Trade History table** (where exchange API supports it):
-- Exchange, market, side, size, entry price, exit price, realized PnL, timestamp
-- Filterable by exchange
+**Transaction History table** (where exchange API supports it):
+- Unified list of all account activity: trades (fills), deposits, withdrawals, internal transfers, sub-account transfers, liquidations, spot transfers, staking operations
+- Columns: time, type (trade/deposit/withdrawal/transfer/liquidation/etc.), summary, amount
+- Each row is clickable, linking to a **Transaction Detail page** (`/accounts/[address]/tx/[hash]`)
+- Filterable by exchange and by transaction type
 - Paginated
 
 **Subaccounts** (where exchange API supports it):
@@ -266,13 +268,55 @@ Perpscan is also an internal debugging and monitoring tool for the team's own pe
 
 ---
 
+### 6.11 Transaction Detail (`/accounts/[address]/tx/[hash]`)
+
+**Purpose**: Deep dive into a single transaction for a given account. Users reach this page by clicking a row in the transaction history table on the account page.
+
+**Content varies by transaction type**:
+
+**For trades (fills)**:
+- Transaction header: type badge ("Trade"), timestamp, tx hash (linked to Hypurrscan)
+- Trade details card: market (linked to market detail page), side (buy/sell), size, price, fee, realized PnL, direction (Open/Close)
+- If multiple fills share the same hash (e.g., a market order filled across price levels), show all fills in a table
+
+**For deposits**:
+- Transaction header: type badge ("Deposit"), timestamp, tx hash
+- Amount deposited (USDC)
+
+**For withdrawals**:
+- Transaction header: type badge ("Withdrawal"), timestamp, tx hash
+- Amount withdrawn, fee, nonce
+
+**For internal / sub-account / spot transfers**:
+- Transaction header: type badge ("Transfer"), timestamp, tx hash
+- From → To addresses (linked to their account pages where applicable)
+- Amount, token, fee
+- Transfer direction (to perp / to spot for accountClassTransfer)
+
+**For liquidations**:
+- Transaction header: type badge ("Liquidation"), timestamp, tx hash
+- Account value at liquidation, total notional liquidated
+- Table of liquidated positions: coin, size
+
+**For staking operations**:
+- Transaction header: type badge ("Stake" / "Unstake"), timestamp, tx hash
+- Token, amount, direction (deposit/withdrawal)
+
+**Navigation**:
+- Back link to the account page (`/accounts/[address]`)
+- Tx hash links to Hypurrscan (`https://hypurrscan.io/tx/[hash]`)
+- Market links to exchange-specific market detail page
+- Address links to account pages
+
+---
+
 ## 7. Data & API Strategy
 
 ### 7.1 Data Sources
 
 | Source         | Used For                                              |
 |----------------|-------------------------------------------------------|
-| Hyperliquid API | Markets, positions, balances, trade history          |
+| Hyperliquid API | Markets, positions, balances, trade history, non-funding ledger updates (deposits, withdrawals, transfers, liquidations) |
 | GMX subgraph / API | Markets, positions, trade history                |
 | Lighter API    | Markets, positions, balances                          |
 | Pacifica API   | TBD                                                   |
@@ -290,6 +334,7 @@ Perpscan is also an internal debugging and monitoring tool for the team's own pe
 | Market prices / funding  | 60 seconds  |
 | Account positions        | 10 seconds  |
 | Trade history            | 60 seconds  |
+| Transaction detail       | 60 seconds  |
 | Charts / historical data | 5 minutes   |
 
 ### 7.3 Feature Availability Matrix
@@ -317,6 +362,7 @@ Features are shown conditionally based on what each exchange's API exposes. If a
 
 - From any market row on an Exchange page → link to **exchange-specific** Market Detail page (`/exchanges/[id]/markets/[symbol]`), NOT the asset overview
 - From any position row on an Account page → link to the relevant exchange-specific Market Detail page
+- From any transaction row on an Account page → link to Transaction Detail page (`/accounts/[address]/tx/[hash]`)
 - From any Market Detail page → link to Asset Overview (cross-exchange) page as a secondary "view on all exchanges" link
 - From any Asset Overview row → link to exchange-specific Market Detail page
 - From any exchange reference → link to Exchange Detail page

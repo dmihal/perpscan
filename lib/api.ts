@@ -213,6 +213,11 @@ export interface Fill {
   fee: string;
   closedPnl: string;
   dir: string;
+  hash: string;
+  oid: number;
+  tid: number;
+  feeToken: string;
+  crossed: boolean;
 }
 
 export async function getHyperliquidFills(address: string, limit: number = 100): Promise<Fill[]> {
@@ -226,6 +231,43 @@ export async function getHyperliquidFills(address: string, limit: number = 100):
     if (!res.ok) return [];
     const fills: Fill[] = await res.json();
     return fills.slice(0, limit);
+  } catch {
+    return [];
+  }
+}
+
+// Ledger update delta types
+export type LedgerDelta =
+  | { type: 'deposit'; usdc: string }
+  | { type: 'withdraw'; usdc: string; nonce: number; fee: string }
+  | { type: 'accountClassTransfer'; usdc: string; toPerp: boolean }
+  | { type: 'spotTransfer'; token: string; amount: string; usdcValue: string; user: string; destination: string; fee: string; nativeTokenFee: string; nonce: number | null }
+  | { type: 'internalTransfer'; usdc: string; user: string; destination: string; fee: string }
+  | { type: 'subAccountTransfer'; usdc: string; user: string; destination: string }
+  | { type: 'liquidation'; liquidatedNtlPos: string; accountValue: string; leverageType: string; liquidatedPositions: { coin: string; szi: string }[] }
+  | { type: 'vaultDeposit'; vault: string; usdc: string }
+  | { type: 'vaultWithdraw'; vault: string; user: string; requestedUsd: string; commission: string; closingCost: string; basis: string; netWithdrawnUsd: string }
+  | { type: 'cStakingTransfer'; token: string; amount: string; isDeposit: boolean }
+  | { type: 'spotGenesis'; token: string; amount: string };
+
+export interface LedgerUpdate {
+  time: number;
+  hash: string;
+  delta: LedgerDelta;
+}
+
+export async function getHyperliquidLedgerUpdates(address: string, days: number = 90): Promise<LedgerUpdate[]> {
+  try {
+    const startTime = Date.now() - days * 24 * 60 * 60 * 1000;
+    const res = await fetch("https://api.hyperliquid.xyz/info", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "userNonFundingLedgerUpdates", user: address, startTime }),
+      next: { revalidate: 60 }
+    });
+    if (!res.ok) return [];
+    const updates: LedgerUpdate[] = await res.json();
+    return updates;
   } catch {
     return [];
   }

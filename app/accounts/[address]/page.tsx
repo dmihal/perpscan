@@ -1,9 +1,10 @@
 import Link from 'next/link';
 import { ArrowLeft, Wallet, ExternalLink, Activity, Shield, AlertTriangle } from 'lucide-react';
-import { getHyperliquidAccount, getHyperliquidFills, getHyperliquidContexts } from '@/lib/api';
+import { getHyperliquidAccount, getHyperliquidFills, getHyperliquidContexts, getHyperliquidLedgerUpdates } from '@/lib/api';
+import type { Fill, LedgerUpdate } from '@/lib/api';
 import PositionsTable from '@/components/PositionsTable';
 import BalancesTable from '@/components/BalancesTable';
-import TradeHistoryTable from '@/components/TradeHistoryTable';
+import TransactionHistoryTable from '@/components/TransactionHistoryTable';
 
 export const revalidate = 10;
 
@@ -13,10 +14,11 @@ export default async function AccountPage({ params }: { params: Promise<{ addres
   const formatCurrency = (value: number) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
 
-  const [hlAccount, hlFills, hlContexts] = await Promise.all([
+  const [hlAccount, hlFills, hlContexts, hlLedger] = await Promise.all([
     getHyperliquidAccount(address),
     getHyperliquidFills(address),
     getHyperliquidContexts(),
+    getHyperliquidLedgerUpdates(address),
   ]);
 
   // Build mark price lookup from contexts
@@ -62,16 +64,84 @@ export default async function AccountPage({ params }: { params: Promise<{ addres
     balances = [{ exchange: 'Hyperliquid', asset: 'USDC', amount: totalValue }];
   }
 
-  const trades = hlFills.map(f => ({
-    coin: f.coin,
-    side: f.side,
-    px: parseFloat(f.px),
-    sz: parseFloat(f.sz),
+  // Build unified transaction list from fills + ledger updates
+  const fillTxs = hlFills.map((f: Fill) => ({
+    hash: f.hash,
     time: f.time,
-    fee: parseFloat(f.fee),
-    closedPnl: parseFloat(f.closedPnl),
-    dir: f.dir,
+    type: 'trade' as const,
+    summary: `${f.dir} ${f.coin}-USD @ $${parseFloat(f.px).toLocaleString()} (${parseFloat(f.sz)} units)`,
+    amount: parseFloat(f.px) * parseFloat(f.sz),
+    exchange: 'Hyperliquid',
   }));
+
+  const ledgerTxs = hlLedger.map((u: LedgerUpdate) => {
+    const d = u.delta;
+    let type: 'deposit' | 'withdrawal' | 'transfer' | 'liquidation' | 'staking' | 'vault' | 'spot' = 'transfer';
+    let summary = '';
+    let amount = 0;
+
+    switch (d.type) {
+      case 'deposit':
+        type = 'deposit';
+        summary = `Deposited ${parseFloat(d.usdc).toLocaleString()} USDC`;
+        amount = Math.abs(parseFloat(d.usdc));
+        break;
+      case 'withdraw':
+        type = 'withdrawal';
+        summary = `Withdrew ${parseFloat(d.usdc).toLocaleString()} USDC (fee: $${parseFloat(d.fee)})`;
+        amount = Math.abs(parseFloat(d.usdc));
+        break;
+      case 'accountClassTransfer':
+        type = 'transfer';
+        summary = `Transferred ${parseFloat(d.usdc).toLocaleString()} USDC ${d.toPerp ? 'to Perp' : 'to Spot'}`;
+        amount = Math.abs(parseFloat(d.usdc));
+        break;
+      case 'internalTransfer':
+        type = 'transfer';
+        summary = `Internal transfer ${parseFloat(d.usdc).toLocaleString()} USDC → ${d.destination.slice(0, 8)}…`;
+        amount = Math.abs(parseFloat(d.usdc));
+        break;
+      case 'subAccountTransfer':
+        type = 'transfer';
+        summary = `Sub-account transfer ${parseFloat(d.usdc).toLocaleString()} USDC → ${d.destination.slice(0, 8)}…`;
+        amount = Math.abs(parseFloat(d.usdc));
+        break;
+      case 'spotTransfer':
+        type = 'spot';
+        summary = `Spot transfer ${parseFloat(d.amount)} ${d.token} → ${d.destination.slice(0, 8)}…`;
+        amount = Math.abs(parseFloat(d.usdcValue));
+        break;
+      case 'liquidation':
+        type = 'liquidation';
+        summary = `Liquidated ${d.leverageType} — ${parseFloat(d.liquidatedNtlPos).toLocaleString()} notional`;
+        amount = Math.abs(parseFloat(d.liquidatedNtlPos));
+        break;
+      case 'vaultDeposit':
+        type = 'vault';
+        summary = `Vault deposit ${parseFloat(d.usdc).toLocaleString()} USDC to ${d.vault.slice(0, 8)}…`;
+        amount = Math.abs(parseFloat(d.usdc));
+        break;
+      case 'vaultWithdraw':
+        type = 'vault';
+        summary = `Vault withdrawal ${parseFloat(d.netWithdrawnUsd).toLocaleString()} USDC from ${d.vault.slice(0, 8)}…`;
+        amount = Math.abs(parseFloat(d.netWithdrawnUsd));
+        break;
+      case 'cStakingTransfer':
+        type = 'staking';
+        summary = `${d.isDeposit ? 'Staked' : 'Unstaked'} ${parseFloat(d.amount)} ${d.token}`;
+        amount = Math.abs(parseFloat(d.amount));
+        break;
+      case 'spotGenesis':
+        type = 'spot';
+        summary = `Spot genesis: received ${parseFloat(d.amount)} ${d.token}`;
+        amount = Math.abs(parseFloat(d.amount));
+        break;
+    }
+
+    return { hash: u.hash, time: u.time, type, summary, amount, exchange: 'Hyperliquid' };
+  });
+
+  const allTransactions = [...fillTxs, ...ledgerTxs].sort((a, b) => b.time - a.time);
 
   const activeExchanges = hasData ? 1 : 0;
 
@@ -174,8 +244,8 @@ export default async function AccountPage({ params }: { params: Promise<{ addres
       )}
 
       <section className="mt-8">
-        <h2 className="text-2xl font-bold tracking-tight mb-4">Trade History</h2>
-        <TradeHistoryTable trades={trades} />
+        <h2 className="text-2xl font-bold tracking-tight mb-4">Transaction History</h2>
+        <TransactionHistoryTable transactions={allTransactions} address={address} />
       </section>
     </div>
   );

@@ -162,11 +162,48 @@ Each integration follows the same pattern:
 
 ## Phase 4: Account Page Enhancements
 
-### 4.1 Trade History
-- [x] Fetch real trade history from Hyperliquid API (fills endpoint)
-- [x] Display in trade history table on account page
-- [ ] Add exchange filter for trade history
-- [x] Paginate trade history results
+### 4.1 Unified Transaction History & Transaction Detail Page
+
+The account page's "Trade History" table is being replaced with a unified **Transaction History** that includes all account activity (trades, deposits, withdrawals, transfers, liquidations, staking). Each transaction row links to a dedicated **Transaction Detail page**.
+
+#### 4.1.1 API Layer — `getHyperliquidLedgerUpdates()`
+- [x] Add `getHyperliquidLedgerUpdates(address, startTime?)` to `lib/api.ts`
+  - Calls `userNonFundingLedgerUpdates` endpoint on Hyperliquid API
+  - Returns typed array of ledger events (deposit, withdraw, accountClassTransfer, spotTransfer, internalTransfer, subAccountTransfer, liquidation, vaultDeposit, vaultWithdraw, cStakingTransfer, etc.)
+- [x] Define TypeScript types for all ledger update delta shapes in `lib/api.ts`
+
+#### 4.1.2 Unified Transaction History on Account Page
+- [x] Replace `TradeHistoryTable` on `/accounts/[address]` with a new `TransactionHistoryTable` component
+  - Merges fills (from `userFills`) and ledger updates (from `userNonFundingLedgerUpdates`) into a single chronological list
+  - Columns: Time, Type (badge), Summary (context-dependent one-liner), Amount
+  - Each row clickable, navigates to `/accounts/[address]/tx/[hash]`
+  - Type filter buttons (All / Trades / Deposits / Withdrawals / Transfers / Other)
+  - Paginated (reuse existing pagination pattern)
+- [ ] Update the exchange-specific account page (`/exchanges/[id]/accounts/[address]`) similarly
+
+#### 4.1.3 Transaction Detail Page (`/accounts/[address]/tx/[hash]`)
+- [x] Create route at `app/accounts/[address]/tx/[hash]/page.tsx`
+- [x] Server component that fetches:
+  - Fills by hash: filter `userFills` response for matching `hash`
+  - Ledger update by hash: filter `userNonFundingLedgerUpdates` response for matching `hash`
+- [x] Render type-specific detail layout:
+  - **Trade**: market link, side, price, size, fee, realized PnL, direction (Open/Close); if multi-fill, show fills table
+  - **Deposit**: amount
+  - **Withdrawal**: amount, fee, nonce
+  - **Transfer**: from/to addresses (linked), amount, token, fee, direction
+  - **Liquidation**: account value, notional liquidated, liquidated positions table
+  - **Staking**: token, amount, deposit/withdrawal
+  - **Vault deposit/withdraw**: amount, vault address, commission details
+  - **Spot genesis**: token, amount received
+- [x] Back link to account page
+- [x] Tx hash linked to Hypurrscan (`https://hypurrscan.io/tx/[hash]`)
+- [x] Market references link to `/exchanges/hyperliquid/markets/[symbol]`
+- [x] Address references link to `/accounts/[address]`
+
+#### 4.1.4 Cleanup
+- [ ] Remove old `TradeHistoryTable` component (no longer used on main account page)
+- [ ] Update exchange-specific account page to use unified tx table
+- [ ] Add exchange filter for transaction history (for future multi-exchange support)
 
 ### 4.2 Subaccounts
 - [ ] Check which exchanges support subaccounts via API
