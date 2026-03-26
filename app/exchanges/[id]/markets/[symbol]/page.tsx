@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { ArrowLeft, Activity, BarChart3, TrendingUp, Shield, Percent, ArrowUpRight } from 'lucide-react';
-import { getAllVenueMarkets, getHyperliquidCandles, getHyperliquidFundingHistory, getParadexCandles, getTopExchanges } from '@/lib/api';
+import { ArrowLeft, Activity, BarChart3, TrendingUp, Shield, Percent, ArrowUpRight, ExternalLink } from 'lucide-react';
+import { getAllVenueMarkets, getHyperliquidCandles, getHyperliquidFundingHistory, getParadexCandles, getParadexFundingHistory, getTopExchanges } from '@/lib/api';
 import PriceLineChart from '@/components/PriceLineChart';
 import FundingRateChart from '@/components/FundingRateChart';
 
@@ -31,7 +31,7 @@ export default async function ExchangeMarketPage({ params }: { params: Promise<{
   const [allMarkets, priceHistory, fundingHistory] = await Promise.all([
     getAllVenueMarkets(),
     isHyperliquid ? getHyperliquidCandles(coin) : isParadex ? getParadexCandles(coin) : Promise.resolve([]),
-    isHyperliquid ? getHyperliquidFundingHistory(coin) : Promise.resolve([]),
+    isHyperliquid ? getHyperliquidFundingHistory(coin) : isParadex ? getParadexFundingHistory(coin) : Promise.resolve([]),
   ]);
 
   const venueName = exchange?.name || id.charAt(0).toUpperCase() + id.slice(1);
@@ -52,6 +52,12 @@ export default async function ExchangeMarketPage({ params }: { params: Promise<{
       </div>
     );
   }
+
+  const exchangeTradeUrls: Record<string, string> = {
+    hyperliquid: `https://app.hyperliquid.xyz/trade/${coin}`,
+    paradex: `https://app.paradex.trade/trade/${coin}-USD-PERP`,
+  };
+  const tradeUrl = exchangeTradeUrls[id] || exchangeTradeUrls[exchange?.defillamaId || ''];
 
   const formatCurrency = (value: number | undefined) => {
     if (!value) return '$0.00';
@@ -98,6 +104,17 @@ export default async function ExchangeMarketPage({ params }: { params: Promise<{
             Cross-Exchange View
             <ArrowUpRight className="ml-2 h-4 w-4" />
           </Link>
+          {tradeUrl && (
+            <a
+              href={tradeUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors bg-primary text-primary-foreground shadow hover:bg-primary/90 h-10 px-6"
+            >
+              Trade on {exchange?.name || venueName}
+              <ExternalLink className="ml-2 h-4 w-4" />
+            </a>
+          )}
         </div>
       </div>
 

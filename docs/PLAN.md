@@ -1,7 +1,7 @@
 # Perpscan Build Plan
 
 **Last updated**: 2026-03-23
-**Overall progress**: ~75% of PRD implemented
+**Overall progress**: ~80% of PRD implemented
 
 ---
 
@@ -57,7 +57,7 @@ These tasks make every existing page production-quality before adding new pages 
 - [x] Asset header: name, symbol, logo, current spot price (from CoinGecko)
 - [x] **Cross-exchange markets table** (primary content): show this asset's perp market on every integrated exchange
   - [x] Columns: exchange name, mark price, 24h volume, OI, funding rate, spread
-  - [ ] Sortable columns
+  - [x] Sortable columns
   - [x] Each row links to `/exchanges/[id]/markets/[symbol]`
 - [x] Funding rate comparison chart (if data available from multiple exchanges)
 - [ ] OI distribution chart
@@ -71,7 +71,7 @@ These tasks make every existing page production-quality before adding new pages 
 - [x] Funding rate history chart
 - [ ] Liquidation history chart
 - [x] Link to asset overview page (cross-exchange view)
-- [ ] Link to exchange's own UI
+- [x] Link to exchange's own UI
 
 ### 2.3 Navigation & Cross-Linking
 - [x] Exchange markets table: each row links to `/exchanges/[id]/markets/[symbol]`
@@ -190,8 +190,8 @@ Each integration follows the same pattern:
 - [ ] Optimize table layouts for small screens
 
 ### 5.2 Miscellaneous
-- [ ] Clean up unused mock data references (dYdX, Synthetix, Kwenta, Polynomial)
-- [ ] Remove or repurpose Gemini API integration (unused)
+- [x] Clean up unused mock data references (dYdX, Synthetix, Kwenta, Polynomial)
+- [x] Remove or repurpose Gemini API integration (unused)
 - [ ] Add proper error boundaries and loading states
 - [x] SEO: meta titles, descriptions for all pages
 

@@ -354,6 +354,26 @@ export async function getHyperliquidFundingHistory(coin: string, days: number = 
   }
 }
 
+export async function getParadexFundingHistory(coin: string, days: number = 30): Promise<ChartDataPoint[]> {
+  try {
+    const endTime = Date.now();
+    const startTime = endTime - days * 24 * 60 * 60 * 1000;
+    const res = await fetch(
+      `https://api.prod.paradex.trade/v1/markets/funding-data?market=${coin}-USD-PERP&start_at=${startTime}&end_at=${endTime}`,
+      { next: { revalidate: 300 } }
+    );
+    if (!res.ok) return [];
+    const data = await res.json();
+    const entries: { created_at: number; funding_rate: string }[] = data.results || [];
+    return entries.map(e => ({
+      date: new Date(e.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit' }),
+      value: parseFloat(e.funding_rate) * 100,
+    }));
+  } catch {
+    return [];
+  }
+}
+
 export async function getTopMarkets(): Promise<Market[]> {
   try {
     const [res, hlData] = await Promise.all([

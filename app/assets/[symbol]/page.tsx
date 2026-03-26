@@ -1,10 +1,11 @@
 import type { Metadata } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
-import { ArrowLeft, ArrowUpRight } from 'lucide-react';
-import { getMarket, getAllVenueMarkets, getHyperliquidCandles, getHyperliquidFundingHistory, ChartDataPoint } from '@/lib/api';
+import { ArrowLeft } from 'lucide-react';
+import { getMarket, getAllVenueMarkets, getHyperliquidCandles, getHyperliquidFundingHistory } from '@/lib/api';
 import PriceLineChart from '@/components/PriceLineChart';
 import FundingRateChart from '@/components/FundingRateChart';
+import AssetMarketsTable from '@/components/AssetMarketsTable';
 
 export const revalidate = 60;
 
@@ -43,13 +44,6 @@ export default async function AssetPage({ params }: { params: Promise<{ symbol: 
       </div>
     );
   }
-
-  const formatCurrency = (value: number | undefined) => {
-    if (!value) return '$0.00';
-    if (value >= 1e9) return `$${(value / 1e9).toFixed(2)}B`;
-    if (value >= 1e6) return `$${(value / 1e6).toFixed(2)}M`;
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
-  };
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-screen-2xl">
@@ -92,58 +86,7 @@ export default async function AssetPage({ params }: { params: Promise<{ symbol: 
       <section className="mb-12">
         <h2 className="text-2xl font-bold tracking-tight mb-4">Perpetual Markets by Exchange</h2>
         {matchingMarkets.length > 0 ? (
-          <div className="rounded-xl border border-border bg-card overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm text-left">
-                <thead className="text-xs text-muted-foreground uppercase bg-secondary/50 border-b border-border">
-                  <tr>
-                    <th className="px-6 py-4 font-medium">Exchange</th>
-                    <th className="px-6 py-4 font-medium text-right">Mark Price</th>
-                    <th className="px-6 py-4 font-medium text-right">24h Volume</th>
-                    <th className="px-6 py-4 font-medium text-right">Open Interest</th>
-                    <th className="px-6 py-4 font-medium text-right">Funding Rate</th>
-                    <th className="px-6 py-4 font-medium text-right">Spread</th>
-                    <th className="px-6 py-4 font-medium text-right"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {matchingMarkets.map(market => (
-                    <tr key={market.id} className="hover:bg-muted/50 transition-colors">
-                      <td className="px-6 py-4 font-medium">
-                        <Link href={`/exchanges/${market.venue.toLowerCase()}`} className="hover:underline">
-                          {market.venue}
-                        </Link>
-                      </td>
-                      <td className="px-6 py-4 text-right font-mono">
-                        ${market.price.toLocaleString(undefined, { minimumFractionDigits: market.price < 1 ? 4 : 2, maximumFractionDigits: market.price < 1 ? 6 : 2 })}
-                      </td>
-                      <td className="px-6 py-4 text-right font-mono">
-                        {formatCurrency(market.volume24h)}
-                      </td>
-                      <td className="px-6 py-4 text-right font-mono">
-                        {formatCurrency(market.openInterest)}
-                      </td>
-                      <td className={`px-6 py-4 text-right font-mono ${market.fundingRate >= 0 ? 'text-emerald-500' : 'text-destructive'}`}>
-                        {market.fundingRate >= 0 ? '+' : ''}{market.fundingRate.toFixed(4)}%
-                      </td>
-                      <td className="px-6 py-4 text-right font-mono text-muted-foreground">
-                        {market.spread.toFixed(4)}%
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <Link
-                          href={`/exchanges/${market.venue.toLowerCase()}/markets/${symbol}`}
-                          className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground h-9 w-9"
-                        >
-                          <ArrowUpRight className="h-4 w-4" />
-                          <span className="sr-only">View on {market.venue}</span>
-                        </Link>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <AssetMarketsTable markets={matchingMarkets} symbol={symbol} />
         ) : (
           <div className="rounded-xl border border-border bg-card p-8 text-center text-muted-foreground">
             <p>No perpetual markets found for {coin} across integrated exchanges.</p>
