@@ -9,8 +9,9 @@ import {
   getLighterAccounts,
   getLighterAssetPriceMap,
   getLighterLogsForAddress,
+  getOstiumPositions,
 } from '@/lib/api';
-import type { Fill, LedgerUpdate, LighterAccount, LighterExplorerLog } from '@/lib/api';
+import type { Fill, LedgerUpdate, LighterAccount, LighterExplorerLog, OstiumPosition } from '@/lib/api';
 import PositionsTable from '@/components/PositionsTable';
 import BalancesTable from '@/components/BalancesTable';
 import TransactionHistoryTable from '@/components/TransactionHistoryTable';
@@ -44,7 +45,7 @@ export default async function AccountPage({ params }: { params: Promise<{ addres
   const formatCurrency = (value: number) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
 
-  const [exchanges, hlAccount, hlFills, hlContexts, hlLedger, lighterAccounts, lighterAssetPrices, lighterLogs] = await Promise.all([
+  const [exchanges, hlAccount, hlFills, hlContexts, hlLedger, lighterAccounts, lighterAssetPrices, lighterLogs, ostiumPositions] = await Promise.all([
     getTopExchanges(),
     getHyperliquidAccount(address),
     getHyperliquidFills(address),
@@ -53,6 +54,7 @@ export default async function AccountPage({ params }: { params: Promise<{ addres
     getLighterAccounts(address),
     getLighterAssetPriceMap(),
     getLighterLogsForAddress(address),
+    getOstiumPositions(address),
   ]);
 
   const assetPriceMap: Record<string, number> = { USDC: 1, USD: 1, ...lighterAssetPrices };
@@ -67,7 +69,8 @@ export default async function AccountPage({ params }: { params: Promise<{ addres
 
   const hasHyperliquidData = Boolean(hlAccount && hlAccount.marginSummary);
   const hasLighterData = lighterAccounts.length > 0;
-  const hasData = hasHyperliquidData || hasLighterData;
+  const hasOstiumData = ostiumPositions.length > 0;
+  const hasData = hasHyperliquidData || hasLighterData || hasOstiumData;
 
   let totalValue = 0;
   let unrealizedPnl = 0;
@@ -162,6 +165,32 @@ export default async function AccountPage({ params }: { params: Promise<{ addres
       });
     }
   });
+
+  if (hasOstiumData) {
+    const ostiumCollateral = ostiumPositions.reduce((sum, p) => sum + p.collateral, 0);
+    totalValue += ostiumCollateral;
+
+    ostiumPositions.forEach((pos, idx) => {
+      unrealizedPnl += pos.pnl;
+      positions.push({
+        id: `ostium-${idx}`,
+        exchange: 'Ostium',
+        market: `${pos.pairFrom}-${pos.pairTo}`,
+        side: pos.side,
+        size: pos.size,
+        entryPrice: pos.entryPrice,
+        markPrice: pos.currentPrice,
+        pnl: pos.pnl,
+        leverage: pos.leverage,
+      });
+    });
+
+    balances.push({
+      exchange: 'Ostium',
+      asset: 'USDC Collateral',
+      amount: ostiumCollateral,
+    });
+  }
 
   const lighterAccountIndexes = new Set(lighterAccounts.map((account) => account.index.toString()));
 

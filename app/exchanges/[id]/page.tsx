@@ -48,6 +48,7 @@ export default async function ExchangePage({ params }: { params: Promise<{ id: s
     '5507': 'Hyperliquid',
     'paradex': 'Paradex',
     'lighter': 'Lighter',
+    'ostium': 'Ostium',
   };
   const venueName = venueNameMap[id] || exchange.name;
   const hasIntegration = id in venueNameMap;

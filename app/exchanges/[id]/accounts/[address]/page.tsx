@@ -1,11 +1,11 @@
 import Link from 'next/link';
 import { ArrowLeft, Wallet, Activity, Shield, CheckCircle2, AlertCircle } from 'lucide-react';
-import { getTopExchanges, getHyperliquidAccount, getLighterAccounts, getLighterAssetPriceMap } from '@/lib/api';
-import type { LighterAccount } from '@/lib/api';
+import { getTopExchanges, getHyperliquidAccount, getLighterAccounts, getLighterAssetPriceMap, getOstiumPositions } from '@/lib/api';
+import type { LighterAccount, OstiumPosition } from '@/lib/api';
 
 export const dynamic = 'force-dynamic';
 
-const supportedAccountExchanges = ['hyperliquid', '5507', 'lighter'];
+const supportedAccountExchanges = ['hyperliquid', '5507', 'lighter', 'ostium'];
 
 function parseNumber(value: string | number | undefined): number {
   if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
@@ -50,6 +50,7 @@ export default async function ExchangeAccountPage({ params }: { params: Promise<
   const isSupported = supportedAccountExchanges.includes(id);
   const isHyperliquid = id === 'hyperliquid' || id === '5507';
   const isLighter = id === 'lighter';
+  const isOstium = id === 'ostium';
 
   if (!isSupported) {
     return (
@@ -232,6 +233,134 @@ export default async function ExchangeAccountPage({ params }: { params: Promise<
                       <td className="px-6 py-4 font-medium">USDC</td>
                       <td className="px-6 py-4 text-right font-mono">{hlValue.toLocaleString()}</td>
                     </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+    );
+  }
+
+  if (isOstium) {
+    const ostiumPositions = await getOstiumPositions(address);
+
+    if (ostiumPositions.length === 0) {
+      return (
+        <div className="container mx-auto px-4 py-8 max-w-screen-2xl">
+          <Link href={`/accounts/${address}`} className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground mb-8 transition-colors">
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back to Cross-Exchange Overview
+          </Link>
+          <div className="rounded-xl border border-border bg-card p-12 text-center">
+            <AlertCircle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+            <h2 className="text-2xl font-bold mb-2">No Account Data</h2>
+            <p className="text-muted-foreground">
+              Could not find open positions for this address on Ostium.
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    const totalCollateral = ostiumPositions.reduce((sum, p) => sum + p.collateral, 0);
+    const totalPnl = ostiumPositions.reduce((sum, p) => sum + p.pnl, 0);
+    const totalNotional = ostiumPositions.reduce((sum, p) => sum + p.size, 0);
+
+    return (
+      <div className="container mx-auto px-4 py-8 max-w-screen-2xl">
+        <Link href={`/accounts/${address}`} className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground mb-8 transition-colors">
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Back to Cross-Exchange Overview
+        </Link>
+
+        <div className="flex flex-col md:flex-row md:items-start justify-between gap-8 mb-12">
+          <div className="flex items-center gap-6">
+            <div className="p-4 bg-primary/10 rounded-full">
+              <Wallet className="h-10 w-10 text-primary" />
+            </div>
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight mb-2 font-mono break-all">{address}</h1>
+              <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                <span className="inline-flex items-center rounded-full border border-border px-2.5 py-0.5 text-xs font-semibold bg-secondary text-secondary-foreground">
+                  {exchange.name} Account
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-4 mb-8 flex items-start gap-3 text-emerald-500">
+          <CheckCircle2 className="h-5 w-5 shrink-0 mt-0.5" />
+          <div className="text-sm">
+            <p className="font-semibold mb-1">Live Account Data</p>
+            <p>The data displayed below is fetched directly from the Ostium subgraph on Arbitrum.</p>
+          </div>
+        </div>
+
+        <section className="grid gap-4 md:grid-cols-3 mb-16">
+          <div className="rounded-xl border border-border bg-card text-card-foreground shadow p-6">
+            <div className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <h3 className="tracking-tight text-sm font-medium">Total Collateral</h3>
+              <Wallet className="h-4 w-4 text-muted-foreground" />
+            </div>
+            <div className="text-3xl font-bold font-mono">{formatCurrency(totalCollateral)}</div>
+          </div>
+          <div className="rounded-xl border border-border bg-card text-card-foreground shadow p-6">
+            <div className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <h3 className="tracking-tight text-sm font-medium">Unrealized PnL</h3>
+              <Activity className="h-4 w-4 text-muted-foreground" />
+            </div>
+            <div className={`text-3xl font-bold font-mono ${totalPnl >= 0 ? 'text-emerald-500' : 'text-destructive'}`}>
+              {totalPnl >= 0 ? '+' : ''}
+              {formatCurrency(totalPnl)}
+            </div>
+          </div>
+          <div className="rounded-xl border border-border bg-card text-card-foreground shadow p-6">
+            <div className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <h3 className="tracking-tight text-sm font-medium">Total Notional</h3>
+              <Shield className="h-4 w-4 text-muted-foreground" />
+            </div>
+            <div className="text-3xl font-bold font-mono">{formatCurrency(totalNotional)}</div>
+          </div>
+        </section>
+
+        <div className="space-y-8">
+          <section>
+            <h2 className="text-2xl font-bold tracking-tight mb-4">Open Positions</h2>
+            <div className="rounded-xl border border-border bg-card overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left">
+                  <thead className="text-xs text-muted-foreground uppercase bg-secondary/50 border-b border-border">
+                    <tr>
+                      <th className="px-6 py-4 font-medium">Market</th>
+                      <th className="px-6 py-4 font-medium">Side</th>
+                      <th className="px-6 py-4 font-medium text-right">Collateral</th>
+                      <th className="px-6 py-4 font-medium text-right">Size</th>
+                      <th className="px-6 py-4 font-medium text-right">Entry Price</th>
+                      <th className="px-6 py-4 font-medium text-right">Mark Price</th>
+                      <th className="px-6 py-4 font-medium text-right">Unrealized PnL</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {ostiumPositions.map((pos) => (
+                      <tr key={pos.id} className="hover:bg-muted/50 transition-colors">
+                        <td className="px-6 py-4 font-medium">{pos.pairFrom}-{pos.pairTo}</td>
+                        <td className="px-6 py-4">
+                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${pos.side === 'Long' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-destructive/10 text-destructive'}`}>
+                            {pos.side} {pos.leverage.toFixed(0)}x
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-right font-mono">{formatCurrency(pos.collateral)}</td>
+                        <td className="px-6 py-4 text-right font-mono">{formatCurrency(pos.size)}</td>
+                        <td className="px-6 py-4 text-right font-mono">{formatCurrency(pos.entryPrice)}</td>
+                        <td className="px-6 py-4 text-right font-mono">{formatCurrency(pos.currentPrice)}</td>
+                        <td className={`px-6 py-4 text-right font-mono font-medium ${pos.pnl >= 0 ? 'text-emerald-500' : 'text-destructive'}`}>
+                          {pos.pnl >= 0 ? '+' : ''}{formatCurrency(pos.pnl)}
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>

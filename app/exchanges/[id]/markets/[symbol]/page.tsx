@@ -41,6 +41,7 @@ export default async function ExchangeMarketPage({ params }: { params: Promise<{
   const isHyperliquid = id === 'hyperliquid' || id === '5507';
   const isParadex = id === 'paradex';
   const isLighter = id === 'lighter';
+  const isOstium = id === 'ostium';
 
   const [allMarkets, priceHistory, fundingHistory] = await Promise.all([
     getAllVenueMarkets(),
@@ -75,6 +76,7 @@ export default async function ExchangeMarketPage({ params }: { params: Promise<{
     hyperliquid: `https://app.hyperliquid.xyz/trade/${coin}`,
     paradex: `https://app.paradex.trade/trade/${coin}-USD-PERP`,
     lighter: 'https://app.lighter.xyz',
+    ostium: `https://app.ostium.io/trade/${coin}`,
   };
   const tradeUrl = exchangeTradeUrls[id] || exchangeTradeUrls[exchange?.defillamaId || ''];
 
