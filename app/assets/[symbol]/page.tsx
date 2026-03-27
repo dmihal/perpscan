@@ -9,6 +9,12 @@ import AssetMarketsTable from '@/components/AssetMarketsTable';
 
 export const revalidate = 60;
 
+function matchesAssetSymbol(marketSymbol: string, routeSymbol: string) {
+  const normalizedMarket = marketSymbol.toLowerCase();
+  const normalizedRoute = routeSymbol.toLowerCase();
+  return normalizedMarket === normalizedRoute || normalizedMarket === `${normalizedRoute}-usd`;
+}
+
 export async function generateMetadata({ params }: { params: Promise<{ symbol: string }> }): Promise<Metadata> {
   const { symbol } = await params;
   const coin = symbol.toUpperCase();
@@ -30,7 +36,7 @@ export default async function AssetPage({ params }: { params: Promise<{ symbol: 
   ]);
 
   const matchingMarkets = allMarkets.filter(
-    m => m.symbol.toLowerCase() === `${coin.toLowerCase()}-usd`
+    m => matchesAssetSymbol(m.symbol, symbol)
   );
 
   if (!spotData && matchingMarkets.length === 0) {

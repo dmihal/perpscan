@@ -35,8 +35,259 @@ export interface VenueMarket {
   openInterest: number;
   spread: number;
   fundingRate: number;
+  marketId?: number;
+  maxLeverage?: number;
+  makerFee?: number;
+  takerFee?: number;
+  tradingHours?: string;
+  reduceOnly?: boolean;
+  fundingIntervalHours?: number;
   isHip3?: boolean;
   onlyIsolated?: boolean;
+}
+
+const LIGHTER_BASE_URL = 'https://mainnet.zklighter.elliot.ai/api/v1';
+const LIGHTER_VENUE_NAME = 'Lighter';
+
+interface LighterMarketConfig {
+  trading_hours?: string;
+  force_reduce_only?: boolean;
+}
+
+interface LighterOrderBookDetail {
+  symbol: string;
+  market_id: number;
+  status?: string;
+  last_trade_price?: string | number;
+  daily_quote_token_volume?: string | number;
+  daily_price_change?: string | number;
+  open_interest?: string | number;
+  default_initial_margin_fraction?: string | number;
+  maker_fee?: string | number;
+  taker_fee?: string | number;
+  market_config?: LighterMarketConfig;
+}
+
+interface LighterFundingRate {
+  market_id: number;
+  symbol: string;
+  rate?: string | number;
+}
+
+interface LighterOrderBookOrder {
+  price?: string;
+}
+
+interface LighterOrderBookOrders {
+  asks?: LighterOrderBookOrder[];
+  bids?: LighterOrderBookOrder[];
+}
+
+export interface LighterSubAccount {
+  index: number;
+  l1_address: string;
+  collateral?: string;
+  account_type?: number;
+}
+
+export interface LighterAccountAsset {
+  symbol: string;
+  asset_id: number;
+  balance: string;
+  locked_balance?: string;
+}
+
+export interface LighterAccountPosition {
+  market_id: number;
+  symbol: string;
+  initial_margin_fraction?: string;
+  sign: number;
+  position: string;
+  avg_entry_price: string;
+  position_value: string;
+  unrealized_pnl: string;
+  realized_pnl: string;
+  liquidation_price?: string;
+  margin_mode?: number;
+}
+
+export interface LighterAccount {
+  index: number;
+  l1_address: string;
+  available_balance?: string;
+  collateral?: string;
+  total_asset_value?: string;
+  positions?: LighterAccountPosition[] | Record<string, LighterAccountPosition>;
+  assets?: LighterAccountAsset[] | Record<string, LighterAccountAsset>;
+}
+
+interface LighterAssetDetail {
+  symbol: string;
+  asset_id?: number;
+  asset_index?: number;
+  index_price?: string | number;
+  price?: string | number;
+  oracle_price?: string | number;
+  last_trade_price?: string | number;
+}
+
+function parseNumber(value: unknown): number {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+  if (typeof value === 'string') {
+    const parsed = parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+}
+
+function toArray<T>(value: T[] | Record<string, T> | null | undefined): T[] {
+  if (!value) return [];
+  return Array.isArray(value) ? value : Object.values(value);
+}
+
+function normalizeLighterSymbol(symbol: string): string {
+  const normalized = symbol.trim().toUpperCase();
+  if (normalized.includes('-')) return normalized;
+  if (normalized.endsWith('USD')) return normalized;
+  return `${normalized}-USD`;
+}
+
+function getBaseMarketSymbol(symbol: string): string {
+  const normalized = normalizeLighterSymbol(symbol);
+  return normalized.endsWith('-USD') ? normalized.slice(0, -4) : normalized;
+}
+
+function getLeverageFromMarginFraction(value: string | number | undefined): number {
+  const marginFraction = parseNumber(value);
+  if (marginFraction <= 0) return 1;
+  const leverage = marginFraction > 1 ? 100 / marginFraction : 1 / marginFraction;
+  return Number.isFinite(leverage) && leverage > 0 ? leverage : 1;
+}
+
+async function getLighterOrderBookDetails(): Promise<LighterOrderBookDetail[]> {
+  try {
+    const res = await fetch(`${LIGHTER_BASE_URL}/orderBookDetails`, {
+      next: { revalidate: 60 }
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    if (Array.isArray(data)) return data;
+    if (Array.isArray(data.order_books)) return data.order_books;
+    if (Array.isArray(data.orderBooks)) return data.orderBooks;
+    return [];
+  } catch (error) {
+    console.error('Lighter orderBookDetails error:', error);
+    return [];
+  }
+}
+
+async function getLighterFundingRates(): Promise<LighterFundingRate[]> {
+  try {
+    const res = await fetch(`${LIGHTER_BASE_URL}/funding-rates`, {
+      next: { revalidate: 60 }
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    if (Array.isArray(data)) return data;
+    if (Array.isArray(data.results)) return data.results;
+    return [];
+  } catch (error) {
+    console.error('Lighter funding-rates error:', error);
+    return [];
+  }
+}
+
+async function getLighterAssetDetails(): Promise<LighterAssetDetail[]> {
+  try {
+    const res = await fetch(`${LIGHTER_BASE_URL}/assetDetails`, {
+      next: { revalidate: 300 }
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    if (Array.isArray(data)) return data;
+    if (Array.isArray(data.assets)) return data.assets;
+    return [];
+  } catch (error) {
+    console.error('Lighter assetDetails error:', error);
+    return [];
+  }
+}
+
+export async function getLighterMarketSpread(marketId: number): Promise<number> {
+  try {
+    const params = new URLSearchParams({
+      market_id: marketId.toString(),
+      limit: '1',
+    });
+    const res = await fetch(`${LIGHTER_BASE_URL}/orderBookOrders?${params.toString()}`, {
+      next: { revalidate: 60 }
+    });
+    if (!res.ok) return 0;
+    const data: LighterOrderBookOrders = await res.json();
+    const bestAsk = parseNumber(data.asks?.[0]?.price);
+    const bestBid = parseNumber(data.bids?.[0]?.price);
+    const mid = (bestAsk + bestBid) / 2;
+    if (bestAsk <= 0 || bestBid <= 0 || mid <= 0) return 0;
+    return ((bestAsk - bestBid) / mid) * 100;
+  } catch (error) {
+    console.error('Lighter orderBookOrders error:', error);
+    return 0;
+  }
+}
+
+async function getLighterExchangeStats() {
+  const markets = await getLighterMarkets();
+  return markets.reduce(
+    (acc, market) => {
+      acc.total24h += market.volume24h;
+      acc.openInterest += market.openInterest;
+      acc.avgSpread += market.spread;
+      return acc;
+    },
+    { total24h: 0, openInterest: 0, avgSpread: 0, marketCount: markets.length }
+  );
+}
+
+export async function getLighterSubAccounts(address: string): Promise<LighterSubAccount[]> {
+  try {
+    const params = new URLSearchParams({ l1_address: address });
+    const res = await fetch(`${LIGHTER_BASE_URL}/accountsByL1Address?${params.toString()}`, {
+      next: { revalidate: 10 }
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    if (data?.code === 21100) return [];
+    return Array.isArray(data?.sub_accounts) ? data.sub_accounts : [];
+  } catch (error) {
+    console.error('Lighter accountsByL1Address error:', error);
+    return [];
+  }
+}
+
+async function getLighterAccountByIndex(index: number): Promise<LighterAccount | null> {
+  try {
+    const params = new URLSearchParams({ by: 'index', value: index.toString() });
+    const res = await fetch(`${LIGHTER_BASE_URL}/account?${params.toString()}`, {
+      next: { revalidate: 10 }
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data?.index !== undefined ? data : null;
+  } catch (error) {
+    console.error('Lighter account error:', error);
+    return null;
+  }
+}
+
+export async function getLighterAccounts(address: string): Promise<LighterAccount[]> {
+  const subAccounts = await getLighterSubAccounts(address);
+  if (subAccounts.length === 0) return [];
+
+  const accounts = await Promise.all(
+    subAccounts.map(subAccount => getLighterAccountByIndex(subAccount.index))
+  );
+
+  return accounts.filter((account): account is LighterAccount => account !== null);
 }
 
 export async function getHyperliquidSpotMeta() {
@@ -136,6 +387,51 @@ async function getParadexMarkets(): Promise<VenueMarket[]> {
   }
 }
 
+async function getLighterMarkets(): Promise<VenueMarket[]> {
+  try {
+    const [details, fundingRates] = await Promise.all([
+      getLighterOrderBookDetails(),
+      getLighterFundingRates(),
+    ]);
+
+    const fundingByMarketId = new Map<number, number>();
+    fundingRates.forEach(rate => {
+      fundingByMarketId.set(rate.market_id, parseNumber(rate.rate) * 100);
+    });
+
+    return details
+      .filter(market => !market.status || market.status === 'active')
+      .map((market) => {
+        const symbol = normalizeLighterSymbol(market.symbol);
+        const baseSymbol = getBaseMarketSymbol(symbol);
+        const price = parseNumber(market.last_trade_price);
+        const openInterestBase = parseNumber(market.open_interest);
+        const defaultInitialMarginFraction = parseNumber(market.default_initial_margin_fraction);
+
+        return {
+          id: `lighter-${market.market_id}-${baseSymbol.toLowerCase()}`,
+          marketId: market.market_id,
+          venue: LIGHTER_VENUE_NAME,
+          symbol,
+          price,
+          volume24h: parseNumber(market.daily_quote_token_volume),
+          openInterest: openInterestBase * price,
+          spread: 0,
+          fundingRate: fundingByMarketId.get(market.market_id) ?? 0,
+          maxLeverage: getLeverageFromMarginFraction(defaultInitialMarginFraction),
+          makerFee: parseNumber(market.maker_fee),
+          takerFee: parseNumber(market.taker_fee),
+          tradingHours: market.market_config?.trading_hours || '',
+          reduceOnly: !!market.market_config?.force_reduce_only,
+          fundingIntervalHours: 1,
+        };
+      });
+  } catch (error) {
+    console.error('Lighter markets error:', error);
+    return [];
+  }
+}
+
 export async function getParadexCandles(coin: string, days: number = 30): Promise<ChartDataPoint[]> {
   try {
     const endTime = Date.now();
@@ -159,12 +455,13 @@ export async function getParadexCandles(coin: string, days: number = 30): Promis
 
 export async function getAllVenueMarkets(): Promise<VenueMarket[]> {
   try {
-    const [hlMarkets, paradexMarkets] = await Promise.all([
+    const [hlMarkets, paradexMarkets, lighterMarkets] = await Promise.all([
       getHyperliquidMarkets(),
       getParadexMarkets(),
+      getLighterMarkets(),
     ]);
 
-    const markets = [...hlMarkets, ...paradexMarkets];
+    const markets = [...hlMarkets, ...paradexMarkets, ...lighterMarkets];
     return markets.sort((a, b) => b.volume24h - a.volume24h);
   } catch (error) {
     console.error(error);
@@ -275,11 +572,12 @@ export async function getHyperliquidLedgerUpdates(address: string, days: number 
 
 export async function getTopExchanges(): Promise<Protocol[]> {
   try {
-    const [res, hlData] = await Promise.all([
+    const [res, hlData, lighterStats] = await Promise.all([
       fetch('https://api.llama.fi/overview/derivatives?excludeTotalDataChart=true&excludeTotalDataChartBreakdown=true&dataType=dailyVolume', {
         next: { revalidate: 3600 }
       }),
-      getHyperliquidContexts()
+      getHyperliquidContexts(),
+      getLighterExchangeStats(),
     ]);
     
     if (!res.ok) throw new Error('Failed to fetch exchanges');
@@ -305,11 +603,36 @@ export async function getTopExchanges(): Promise<Protocol[]> {
     
     // Filter out non-exchanges or sort by volume
     const protocols: Protocol[] = data.protocols || [];
-    return protocols
-      .sort((a, b) => (b.total24h || 0) - (a.total24h || 0))
-      .slice(0, 10)
+    const sortedProtocols = [...protocols].sort((a, b) => (b.total24h || 0) - (a.total24h || 0));
+    const selectedProtocols = sortedProtocols.slice(0, 10);
+    const lighterProtocol = protocols.find(
+      p => p.name.toLowerCase() === 'lighter' || p.defillamaId?.toLowerCase() === 'lighter'
+    );
+
+    if (lighterProtocol && !selectedProtocols.some(p => p.name.toLowerCase() === 'lighter' || p.defillamaId?.toLowerCase() === 'lighter')) {
+      selectedProtocols.push(lighterProtocol);
+    }
+
+    if (!lighterProtocol && lighterStats.marketCount > 0) {
+      selectedProtocols.push({
+        defillamaId: 'lighter',
+        name: LIGHTER_VENUE_NAME,
+        displayName: LIGHTER_VENUE_NAME,
+        module: 'lighter',
+        category: 'Derivatives',
+        logo: '',
+        chains: ['Ethereum'],
+        total24h: lighterStats.total24h,
+        total7d: 0,
+        total30d: 0,
+        totalAllTime: 0,
+      });
+    }
+
+    return selectedProtocols
       .map(p => {
         const isHL = p.name.toLowerCase() === 'hyperliquid' || p.defillamaId === 'hyperliquid' || p.defillamaId === '5507';
+        const isLighter = p.name.toLowerCase() === 'lighter' || p.defillamaId?.toLowerCase() === 'lighter';
         if (isHL) {
           return {
             ...p,
@@ -319,13 +642,32 @@ export async function getTopExchanges(): Promise<Protocol[]> {
             avgSpread: (hlData && hlSpreadCount > 0) ? (hlSpreadSum / hlSpreadCount) * 100 : 0.02
           };
         }
+        if (isLighter) {
+          return {
+            ...p,
+            defillamaId: 'lighter',
+            name: LIGHTER_VENUE_NAME,
+            displayName: LIGHTER_VENUE_NAME,
+            module: p.module || 'lighter',
+            category: p.category || 'Derivatives',
+            chains: p.chains?.length ? p.chains : ['Ethereum'],
+            total24h: lighterStats.total24h || p.total24h,
+            total7d: p.total7d || 0,
+            total30d: p.total30d || 0,
+            totalAllTime: p.totalAllTime || 0,
+            openInterest: lighterStats.openInterest,
+            avgSpread: lighterStats.marketCount > 0 ? lighterStats.avgSpread / lighterStats.marketCount : 0,
+          };
+        }
         return {
           ...p,
           // Mocking Open Interest and Avg Spread for UI purposes
           openInterest: (p.total24h || 0) * (0.2 + Math.random() * 0.8),
           avgSpread: 0.01 + Math.random() * 0.05
         };
-      });
+      })
+      .filter((protocol, index, list) => list.findIndex(item => item.defillamaId === protocol.defillamaId) === index)
+      .sort((a, b) => (b.total24h || 0) - (a.total24h || 0));
   } catch (error) {
     console.error(error);
     return [];
@@ -515,4 +857,17 @@ export async function getMarket(id: string): Promise<Market | null> {
     console.error(error);
     return null;
   }
+}
+
+export async function getLighterAssetPriceMap(): Promise<Record<string, number>> {
+  const assetDetails = await getLighterAssetDetails();
+  return assetDetails.reduce<Record<string, number>>((acc, asset) => {
+    const price =
+      parseNumber(asset.index_price) ||
+      parseNumber(asset.price) ||
+      parseNumber(asset.oracle_price) ||
+      parseNumber(asset.last_trade_price);
+    acc[asset.symbol.toUpperCase()] = price;
+    return acc;
+  }, {});
 }

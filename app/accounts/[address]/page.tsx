@@ -1,12 +1,40 @@
 import Link from 'next/link';
 import { ArrowLeft, Wallet, ExternalLink, Activity, Shield, AlertTriangle } from 'lucide-react';
-import { getHyperliquidAccount, getHyperliquidFills, getHyperliquidContexts, getHyperliquidLedgerUpdates } from '@/lib/api';
-import type { Fill, LedgerUpdate } from '@/lib/api';
+import {
+  getHyperliquidAccount,
+  getHyperliquidFills,
+  getHyperliquidContexts,
+  getHyperliquidLedgerUpdates,
+  getLighterAccounts,
+  getLighterAssetPriceMap,
+} from '@/lib/api';
+import type { Fill, LedgerUpdate, LighterAccount } from '@/lib/api';
 import PositionsTable from '@/components/PositionsTable';
 import BalancesTable from '@/components/BalancesTable';
 import TransactionHistoryTable from '@/components/TransactionHistoryTable';
 
 export const revalidate = 10;
+
+function parseNumber(value: string | number | undefined): number {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+  if (typeof value === 'string') {
+    const parsed = parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+}
+
+function toArray<T>(value: T[] | Record<string, T> | undefined): T[] {
+  if (!value) return [];
+  return Array.isArray(value) ? value : Object.values(value);
+}
+
+function getLighterLeverage(initialMarginFraction?: string): number {
+  const marginFraction = parseNumber(initialMarginFraction);
+  if (marginFraction <= 0) return 1;
+  const leverage = marginFraction > 1 ? 100 / marginFraction : 1 / marginFraction;
+  return Number.isFinite(leverage) && leverage > 0 ? leverage : 1;
+}
 
 export default async function AccountPage({ params }: { params: Promise<{ address: string }> }) {
   const { address } = await params;
@@ -14,41 +42,58 @@ export default async function AccountPage({ params }: { params: Promise<{ addres
   const formatCurrency = (value: number) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
 
-  const [hlAccount, hlFills, hlContexts, hlLedger] = await Promise.all([
+  const [hlAccount, hlFills, hlContexts, hlLedger, lighterAccounts, lighterAssetPrices] = await Promise.all([
     getHyperliquidAccount(address),
     getHyperliquidFills(address),
     getHyperliquidContexts(),
     getHyperliquidLedgerUpdates(address),
+    getLighterAccounts(address),
+    getLighterAssetPriceMap(),
   ]);
 
-  // Build mark price lookup from contexts
+  const assetPriceMap: Record<string, number> = { USDC: 1, USD: 1, ...lighterAssetPrices };
+
   const markPrices: Record<string, number> = {};
   if (hlContexts && hlContexts[0] && hlContexts[1]) {
     hlContexts[0].universe.forEach((m: any, idx: number) => {
       const ctx = hlContexts[1][idx];
-      if (ctx) markPrices[m.name] = parseFloat(ctx.markPx || "0");
+      if (ctx) markPrices[m.name] = parseFloat(ctx.markPx || '0');
     });
   }
 
-  const hasData = hlAccount && hlAccount.marginSummary;
+  const hasHyperliquidData = Boolean(hlAccount && hlAccount.marginSummary);
+  const hasLighterData = lighterAccounts.length > 0;
+  const hasData = hasHyperliquidData || hasLighterData;
 
   let totalValue = 0;
   let unrealizedPnl = 0;
-  let marginUsage = 0;
-  let positions: any[] = [];
-  let balances: any[] = [];
+  let totalMarginUsed = 0;
+  const positions: {
+    id: string;
+    exchange: string;
+    market: string;
+    side: string;
+    size: number;
+    entryPrice: number;
+    markPrice: number;
+    pnl: number;
+    leverage: number;
+  }[] = [];
+  const balances: { exchange: string; asset: string; amount: number }[] = [];
 
-  if (hasData) {
-    totalValue = parseFloat(hlAccount.marginSummary.accountValue || "0");
-    const marginUsed = parseFloat(hlAccount.marginSummary.totalMarginUsed || "0");
-    marginUsage = totalValue > 0 ? (marginUsed / totalValue) * 100 : 0;
+  if (hasHyperliquidData && hlAccount?.marginSummary) {
+    const hlValue = parseFloat(hlAccount.marginSummary.accountValue || '0');
+    const hlMarginUsed = parseFloat(hlAccount.marginSummary.totalMarginUsed || '0');
+    totalValue += hlValue;
+    totalMarginUsed += hlMarginUsed;
 
-    positions = (hlAccount.assetPositions || []).map((p: any, idx: number) => {
+    (hlAccount.assetPositions || []).forEach((p: any, idx: number) => {
       const pos = p.position;
       const size = parseFloat(pos.szi);
-      const pnl = parseFloat(pos.unrealizedPnl || "0");
+      if (!Number.isFinite(size) || size === 0) return;
+      const pnl = parseFloat(pos.unrealizedPnl || '0');
       unrealizedPnl += pnl;
-      return {
+      positions.push({
         id: `hl-${idx}`,
         exchange: 'Hyperliquid',
         market: `${pos.coin}-USD`,
@@ -58,13 +103,62 @@ export default async function AccountPage({ params }: { params: Promise<{ addres
         markPrice: markPrices[pos.coin] || parseFloat(pos.entryPx),
         pnl,
         leverage: pos.leverage ? pos.leverage.value : 1,
-      };
+      });
     });
 
-    balances = [{ exchange: 'Hyperliquid', asset: 'USDC', amount: totalValue }];
+    balances.push({ exchange: 'Hyperliquid', asset: 'USDC', amount: hlValue });
   }
 
-  // Build unified transaction list from fills + ledger updates
+  lighterAccounts.forEach((account: LighterAccount) => {
+    const accountValue = parseNumber(account.total_asset_value) || parseNumber(account.collateral);
+    const availableBalance = parseNumber(account.available_balance);
+    totalValue += accountValue;
+    totalMarginUsed += Math.max(accountValue - availableBalance, 0);
+
+    toArray(account.positions).forEach((position, idx) => {
+      const rawSize = parseNumber(position.position);
+      if (!rawSize || position.sign === 0) return;
+      const size = Math.abs(rawSize);
+      const pnl = parseNumber(position.unrealized_pnl);
+      const markPrice = size > 0 ? parseNumber(position.position_value) / size : parseNumber(position.avg_entry_price);
+      unrealizedPnl += pnl;
+      positions.push({
+        id: `lighter-${account.index}-${idx}`,
+        exchange: 'Lighter',
+        market: position.symbol,
+        side: position.sign > 0 ? 'Long' : 'Short',
+        size,
+        entryPrice: parseNumber(position.avg_entry_price),
+        markPrice: Number.isFinite(markPrice) && markPrice > 0 ? markPrice : parseNumber(position.avg_entry_price),
+        pnl,
+        leverage: getLighterLeverage(position.initial_margin_fraction),
+      });
+    });
+
+    let addedBalanceRow = false;
+    toArray(account.assets).forEach((asset) => {
+      const amount = parseNumber(asset.balance) + parseNumber(asset.locked_balance);
+      if (amount <= 0) return;
+      const symbol = asset.symbol.toUpperCase();
+      const unitPrice = assetPriceMap[symbol];
+      if (!unitPrice) return;
+      balances.push({
+        exchange: 'Lighter',
+        asset: asset.symbol,
+        amount: amount * unitPrice,
+      });
+      addedBalanceRow = true;
+    });
+
+    if (!addedBalanceRow && accountValue > 0) {
+      balances.push({
+        exchange: 'Lighter',
+        asset: `Account ${account.index}`,
+        amount: accountValue,
+      });
+    }
+  });
+
   const fillTxs = hlFills.map((f: Fill) => ({
     hash: f.hash,
     time: f.time,
@@ -98,32 +192,32 @@ export default async function AccountPage({ params }: { params: Promise<{ addres
         break;
       case 'internalTransfer':
         type = 'transfer';
-        summary = `Internal transfer ${parseFloat(d.usdc).toLocaleString()} USDC → ${d.destination.slice(0, 8)}…`;
+        summary = `Internal transfer ${parseFloat(d.usdc).toLocaleString()} USDC -> ${d.destination.slice(0, 8)}...`;
         amount = Math.abs(parseFloat(d.usdc));
         break;
       case 'subAccountTransfer':
         type = 'transfer';
-        summary = `Sub-account transfer ${parseFloat(d.usdc).toLocaleString()} USDC → ${d.destination.slice(0, 8)}…`;
+        summary = `Sub-account transfer ${parseFloat(d.usdc).toLocaleString()} USDC -> ${d.destination.slice(0, 8)}...`;
         amount = Math.abs(parseFloat(d.usdc));
         break;
       case 'spotTransfer':
         type = 'spot';
-        summary = `Spot transfer ${parseFloat(d.amount)} ${d.token} → ${d.destination.slice(0, 8)}…`;
+        summary = `Spot transfer ${parseFloat(d.amount)} ${d.token} -> ${d.destination.slice(0, 8)}...`;
         amount = Math.abs(parseFloat(d.usdcValue));
         break;
       case 'liquidation':
         type = 'liquidation';
-        summary = `Liquidated ${d.leverageType} — ${parseFloat(d.liquidatedNtlPos).toLocaleString()} notional`;
+        summary = `Liquidated ${d.leverageType} - ${parseFloat(d.liquidatedNtlPos).toLocaleString()} notional`;
         amount = Math.abs(parseFloat(d.liquidatedNtlPos));
         break;
       case 'vaultDeposit':
         type = 'vault';
-        summary = `Vault deposit ${parseFloat(d.usdc).toLocaleString()} USDC to ${d.vault.slice(0, 8)}…`;
+        summary = `Vault deposit ${parseFloat(d.usdc).toLocaleString()} USDC to ${d.vault.slice(0, 8)}...`;
         amount = Math.abs(parseFloat(d.usdc));
         break;
       case 'vaultWithdraw':
         type = 'vault';
-        summary = `Vault withdrawal ${parseFloat(d.netWithdrawnUsd).toLocaleString()} USDC from ${d.vault.slice(0, 8)}…`;
+        summary = `Vault withdrawal ${parseFloat(d.netWithdrawnUsd).toLocaleString()} USDC from ${d.vault.slice(0, 8)}...`;
         amount = Math.abs(parseFloat(d.netWithdrawnUsd));
         break;
       case 'cStakingTransfer':
@@ -142,8 +236,10 @@ export default async function AccountPage({ params }: { params: Promise<{ addres
   });
 
   const allTransactions = [...fillTxs, ...ledgerTxs].sort((a, b) => b.time - a.time);
-
-  const activeExchanges = hasData ? 1 : 0;
+  const marginUsage = totalValue > 0 ? (totalMarginUsed / totalValue) * 100 : 0;
+  const activeExchanges = ['Hyperliquid', 'Lighter'].filter((exchange) =>
+    exchange === 'Hyperliquid' ? hasHyperliquidData : hasLighterData
+  );
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-screen-2xl">
@@ -163,10 +259,10 @@ export default async function AccountPage({ params }: { params: Promise<{ addres
               <span className="inline-flex items-center rounded-full border border-border px-2.5 py-0.5 text-xs font-semibold bg-secondary text-secondary-foreground">
                 EVM Account
               </span>
-              {activeExchanges > 0 && (
+              {activeExchanges.length > 0 && (
                 <span className="flex items-center text-emerald-500">
                   <Activity className="mr-1 h-3 w-3" />
-                  Active on Hyperliquid
+                  Active on {activeExchanges.join(', ')}
                 </span>
               )}
             </div>
@@ -190,7 +286,7 @@ export default async function AccountPage({ params }: { params: Promise<{ addres
           <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5" />
           <div className="text-sm">
             <p className="font-semibold mb-1">No Account Data Found</p>
-            <p>This address has no positions or balance on Hyperliquid. More exchanges will be supported soon.</p>
+            <p>This address has no positions or balance on Hyperliquid or Lighter.</p>
           </div>
         </div>
       )}
@@ -237,14 +333,27 @@ export default async function AccountPage({ params }: { params: Promise<{ addres
 
             <section>
               <h2 className="text-2xl font-bold tracking-tight mb-4">Balances</h2>
-              <BalancesTable balances={balances} address={address} />
+              {balances.length > 0 ? (
+                <BalancesTable balances={balances} address={address} />
+              ) : (
+                <div className="rounded-xl border border-border bg-card p-8 text-center text-muted-foreground">
+                  No balances found.
+                </div>
+              )}
             </section>
           </div>
         </>
       )}
 
       <section className="mt-8">
-        <h2 className="text-2xl font-bold tracking-tight mb-4">Transaction History</h2>
+        <div className="flex items-center justify-between gap-4 mb-4">
+          <h2 className="text-2xl font-bold tracking-tight">Transaction History</h2>
+          {hasLighterData && (
+            <p className="text-sm text-muted-foreground">
+              Lighter does not expose public account history, so this section shows Hyperliquid activity only.
+            </p>
+          )}
+        </div>
         <TransactionHistoryTable transactions={allTransactions} address={address} />
       </section>
     </div>

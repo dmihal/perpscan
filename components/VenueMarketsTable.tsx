@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { ArrowUpRight, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { VenueMarket } from '@/lib/api';
@@ -31,17 +31,16 @@ export default function VenueMarketsTable({ markets }: { markets: VenueMarket[] 
 
   const { sortedData, sortKey, sortOrder, toggleSort } = useSortable(filtered, 'volume24h');
 
-  useEffect(() => { setPage(0); }, [search, venueFilter, sortKey, sortOrder]);
-
   const totalPages = Math.ceil(sortedData.length / PAGE_SIZE);
-  const pageData = sortedData.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+  const safePage = Math.min(page, Math.max(totalPages - 1, 0));
+  const pageData = sortedData.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
 
   return (
     <div>
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <div className="flex flex-wrap gap-2">
           <button
-            onClick={() => setVenueFilter('')}
+            onClick={() => { setVenueFilter(''); setPage(0); }}
             className={`px-3 py-1.5 text-sm font-medium rounded-full transition-colors ${!venueFilter ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'}`}
           >
             All Venues
@@ -49,7 +48,7 @@ export default function VenueMarketsTable({ markets }: { markets: VenueMarket[] 
           {venues.map(venue => (
             <button
               key={venue}
-              onClick={() => setVenueFilter(venue === venueFilter ? '' : venue)}
+              onClick={() => { setVenueFilter(venue === venueFilter ? '' : venue); setPage(0); }}
               className={`px-3 py-1.5 text-sm font-medium rounded-full transition-colors ${venueFilter === venue ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'}`}
             >
               {venue}
@@ -62,7 +61,7 @@ export default function VenueMarketsTable({ markets }: { markets: VenueMarket[] 
             type="search"
             placeholder="Search markets..."
             value={search}
-            onChange={e => setSearch(e.target.value)}
+            onChange={e => { setSearch(e.target.value); setPage(0); }}
             className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring pl-8"
           />
         </div>
@@ -73,13 +72,13 @@ export default function VenueMarketsTable({ markets }: { markets: VenueMarket[] 
           <table className="w-full text-sm text-left">
             <thead className="text-xs text-muted-foreground uppercase bg-secondary/50 border-b border-border">
               <tr>
-                <SortableHeader label="Market" sortKey="symbol" currentSortKey={sortKey} sortOrder={sortOrder} onSort={toggleSort} />
+                <SortableHeader label="Market" sortKey="symbol" currentSortKey={sortKey} sortOrder={sortOrder} onSort={(key) => { setPage(0); toggleSort(key); }} />
                 <th className="px-6 py-4 font-medium">Venue</th>
-                <SortableHeader label="Price" sortKey="price" currentSortKey={sortKey} sortOrder={sortOrder} onSort={toggleSort} align="right" />
-                <SortableHeader label="24h Volume" sortKey="volume24h" currentSortKey={sortKey} sortOrder={sortOrder} onSort={toggleSort} align="right" />
-                <SortableHeader label="Open Interest" sortKey="openInterest" currentSortKey={sortKey} sortOrder={sortOrder} onSort={toggleSort} align="right" />
-                <SortableHeader label="Funding Rate" sortKey="fundingRate" currentSortKey={sortKey} sortOrder={sortOrder} onSort={toggleSort} align="right" />
-                <SortableHeader label="Avg Spread" sortKey="spread" currentSortKey={sortKey} sortOrder={sortOrder} onSort={toggleSort} align="right" />
+                <SortableHeader label="Price" sortKey="price" currentSortKey={sortKey} sortOrder={sortOrder} onSort={(key) => { setPage(0); toggleSort(key); }} align="right" />
+                <SortableHeader label="24h Volume" sortKey="volume24h" currentSortKey={sortKey} sortOrder={sortOrder} onSort={(key) => { setPage(0); toggleSort(key); }} align="right" />
+                <SortableHeader label="Open Interest" sortKey="openInterest" currentSortKey={sortKey} sortOrder={sortOrder} onSort={(key) => { setPage(0); toggleSort(key); }} align="right" />
+                <SortableHeader label="Funding Rate" sortKey="fundingRate" currentSortKey={sortKey} sortOrder={sortOrder} onSort={(key) => { setPage(0); toggleSort(key); }} align="right" />
+                <SortableHeader label="Avg Spread" sortKey="spread" currentSortKey={sortKey} sortOrder={sortOrder} onSort={(key) => { setPage(0); toggleSort(key); }} align="right" />
                 <th className="px-6 py-4 font-medium text-right"></th>
               </tr>
             </thead>
@@ -138,20 +137,20 @@ export default function VenueMarketsTable({ markets }: { markets: VenueMarket[] 
       {totalPages > 1 && (
         <div className="flex items-center justify-between mt-4 text-sm text-muted-foreground">
           <span>
-            Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, sortedData.length)} of {sortedData.length}
+            Showing {safePage * PAGE_SIZE + 1}–{Math.min((safePage + 1) * PAGE_SIZE, sortedData.length)} of {sortedData.length}
           </span>
           <div className="flex items-center gap-1">
             <button
               onClick={() => setPage(p => Math.max(0, p - 1))}
-              disabled={page === 0}
+              disabled={safePage === 0}
               className="inline-flex items-center justify-center rounded-md h-8 w-8 transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-40 disabled:pointer-events-none"
             >
               <ChevronLeft className="h-4 w-4" />
             </button>
-            <span className="px-2">Page {page + 1} of {totalPages}</span>
+            <span className="px-2">Page {safePage + 1} of {totalPages}</span>
             <button
               onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
-              disabled={page >= totalPages - 1}
+              disabled={safePage >= totalPages - 1}
               className="inline-flex items-center justify-center rounded-md h-8 w-8 transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-40 disabled:pointer-events-none"
             >
               <ChevronRight className="h-4 w-4" />

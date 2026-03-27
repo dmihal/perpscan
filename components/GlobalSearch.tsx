@@ -103,10 +103,6 @@ export default function GlobalSearch() {
 
   const results = getResults();
 
-  useEffect(() => {
-    setSelectedIndex(0);
-  }, [query]);
-
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'ArrowDown') {
       e.preventDefault();
@@ -152,7 +148,11 @@ export default function GlobalSearch() {
         type="search"
         placeholder="Search... (press /)"
         value={query}
-        onChange={e => { setQuery(e.target.value); setOpen(true); }}
+        onChange={e => {
+          setQuery(e.target.value);
+          setSelectedIndex(0);
+          setOpen(true);
+        }}
         onFocus={() => setOpen(true)}
         onKeyDown={handleKeyDown}
         className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring pl-8 sm:w-[300px] md:w-[200px] lg:w-[300px]"

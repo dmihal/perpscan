@@ -1,32 +1,46 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ArrowLeft, Activity, BarChart3, TrendingUp, Shield, Percent, ArrowUpRight, ExternalLink } from 'lucide-react';
-import { getAllVenueMarkets, getHyperliquidCandles, getHyperliquidFundingHistory, getParadexCandles, getParadexFundingHistory, getTopExchanges } from '@/lib/api';
+import { getAllVenueMarkets, getHyperliquidCandles, getHyperliquidFundingHistory, getLighterMarketSpread, getParadexCandles, getParadexFundingHistory, getTopExchanges } from '@/lib/api';
 import PriceLineChart from '@/components/PriceLineChart';
 import FundingRateChart from '@/components/FundingRateChart';
 
 export const revalidate = 60;
 
+function formatRouteMarketSymbol(symbol: string) {
+  const upper = symbol.toUpperCase();
+  if (upper.includes('-') || upper.endsWith('USD')) return upper;
+  return `${upper}-USD`;
+}
+
+function marketMatchesRouteSymbol(marketSymbol: string, routeSymbol: string) {
+  const normalizedMarket = marketSymbol.toLowerCase();
+  const normalizedRoute = routeSymbol.toLowerCase();
+  return normalizedMarket === normalizedRoute || normalizedMarket === `${normalizedRoute}-usd`;
+}
+
 export async function generateMetadata({ params }: { params: Promise<{ id: string; symbol: string }> }): Promise<Metadata> {
   const { id, symbol } = await params;
-  const coin = symbol.toUpperCase();
+  const marketSymbol = formatRouteMarketSymbol(symbol);
   const exchanges = await getTopExchanges();
   const exchange = exchanges.find(ex => ex.defillamaId === id || (id === '5507' && ex.defillamaId === 'hyperliquid'));
   return {
-    title: `${coin}-USD on ${exchange?.name || id} — Perp Scan`,
-    description: `${coin}-USD perpetual market stats, price chart, and funding rate history on ${exchange?.name || id}.`,
+    title: `${marketSymbol} on ${exchange?.name || id} — Perp Scan`,
+    description: `${marketSymbol} perpetual market stats, price chart, and funding rate history on ${exchange?.name || id}.`,
   };
 }
 
 export default async function ExchangeMarketPage({ params }: { params: Promise<{ id: string; symbol: string }> }) {
   const { id, symbol } = await params;
   const coin = symbol.toUpperCase();
+  const routeMarketSymbol = formatRouteMarketSymbol(symbol);
 
   const exchanges = await getTopExchanges();
   const exchange = exchanges.find(ex => ex.defillamaId === id || (id === '5507' && ex.defillamaId === 'hyperliquid'));
 
   const isHyperliquid = id === 'hyperliquid' || id === '5507';
   const isParadex = id === 'paradex';
+  const isLighter = id === 'lighter';
 
   const [allMarkets, priceHistory, fundingHistory] = await Promise.all([
     getAllVenueMarkets(),
@@ -35,16 +49,20 @@ export default async function ExchangeMarketPage({ params }: { params: Promise<{
   ]);
 
   const venueName = exchange?.name || id.charAt(0).toUpperCase() + id.slice(1);
-  const market = allMarkets.find(
-    m => m.venue.toLowerCase() === venueName.toLowerCase() && m.symbol.toLowerCase() === `${coin.toLowerCase()}-usd`
+  const marketMatch = allMarkets.find(
+    m => m.venue.toLowerCase() === venueName.toLowerCase() && marketMatchesRouteSymbol(m.symbol, symbol)
   );
+  const lighterSpread = isLighter && marketMatch?.marketId ? await getLighterMarketSpread(marketMatch.marketId) : null;
+  const market = marketMatch && lighterSpread !== null
+    ? { ...marketMatch, spread: lighterSpread || marketMatch.spread }
+    : marketMatch;
 
   if (!market) {
     return (
       <div className="container mx-auto px-4 py-16 text-center">
         <h1 className="text-3xl font-bold mb-4">Market Not Found</h1>
         <p className="text-muted-foreground mb-8">
-          Could not find {coin}-USD on {exchange?.name || id}.
+          Could not find {routeMarketSymbol} on {exchange?.name || id}.
         </p>
         <Link href={`/exchanges/${id}`} className="text-primary hover:underline">
           Back to Exchange
@@ -56,6 +74,7 @@ export default async function ExchangeMarketPage({ params }: { params: Promise<{
   const exchangeTradeUrls: Record<string, string> = {
     hyperliquid: `https://app.hyperliquid.xyz/trade/${coin}`,
     paradex: `https://app.paradex.trade/trade/${coin}-USD-PERP`,
+    lighter: 'https://app.lighter.xyz',
   };
   const tradeUrl = exchangeTradeUrls[id] || exchangeTradeUrls[exchange?.defillamaId || ''];
 
@@ -89,9 +108,24 @@ export default async function ExchangeMarketPage({ params }: { params: Promise<{
               <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold border-transparent bg-amber-500/10 text-amber-500">
                 Isolated Only
               </span>
-            ) : (
+            ) : isHyperliquid ? (
               <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold border-transparent bg-emerald-500/10 text-emerald-500">
                 Cross Margin
+              </span>
+            ) : null}
+            {market.reduceOnly && (
+              <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold border-transparent bg-orange-500/10 text-orange-500">
+                Reduce Only
+              </span>
+            )}
+            {market.fundingIntervalHours && (
+              <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold border-transparent bg-sky-500/10 text-sky-500">
+                {market.fundingIntervalHours}h Funding
+              </span>
+            )}
+            {market.makerFee === 0 && market.takerFee === 0 && (
+              <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold border-transparent bg-emerald-500/10 text-emerald-500">
+                0% Fees
               </span>
             )}
           </div>
@@ -165,6 +199,35 @@ export default async function ExchangeMarketPage({ params }: { params: Promise<{
           </div>
         </div>
       </section>
+
+      {(market.maxLeverage || market.tradingHours || market.reduceOnly || market.makerFee !== undefined || market.takerFee !== undefined) && (
+        <section className="grid gap-4 md:grid-cols-4 mb-12">
+          {market.maxLeverage && (
+            <div className="rounded-xl border border-border bg-card text-card-foreground shadow p-6">
+              <div className="text-sm font-medium text-muted-foreground mb-2">Max Leverage</div>
+              <div className="text-2xl font-bold font-mono">{market.maxLeverage.toFixed(0)}x</div>
+            </div>
+          )}
+          {market.takerFee !== undefined && (
+            <div className="rounded-xl border border-border bg-card text-card-foreground shadow p-6">
+              <div className="text-sm font-medium text-muted-foreground mb-2">Taker Fee</div>
+              <div className="text-2xl font-bold font-mono">{market.takerFee.toFixed(4)}%</div>
+            </div>
+          )}
+          {market.makerFee !== undefined && (
+            <div className="rounded-xl border border-border bg-card text-card-foreground shadow p-6">
+              <div className="text-sm font-medium text-muted-foreground mb-2">Maker Fee</div>
+              <div className="text-2xl font-bold font-mono">{market.makerFee.toFixed(4)}%</div>
+            </div>
+          )}
+          {market.tradingHours !== undefined && (
+            <div className="rounded-xl border border-border bg-card text-card-foreground shadow p-6">
+              <div className="text-sm font-medium text-muted-foreground mb-2">Trading Hours</div>
+              <div className="text-base font-medium">{market.tradingHours || '24 / 7'}</div>
+            </div>
+          )}
+        </section>
+      )}
 
       <div className="grid gap-8 md:grid-cols-2 mb-12">
         {priceHistory.length > 0 && (
