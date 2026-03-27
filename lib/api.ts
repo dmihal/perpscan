@@ -409,7 +409,9 @@ async function getLighterAccountByIndex(index: number): Promise<LighterAccount |
     });
     if (!res.ok) return null;
     const data = await res.json();
-    return data?.index !== undefined ? data : null;
+    if (data?.index !== undefined) return data;
+    if (Array.isArray(data?.accounts) && data.accounts[0]?.index !== undefined) return data.accounts[0];
+    return null;
   } catch (error) {
     console.error('Lighter account error:', error);
     return null;
