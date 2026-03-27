@@ -12,18 +12,26 @@ import {
   getLighterAssetPriceMap,
   getLighterLogsForAddress,
   getOstiumPositions,
+  getOstiumTradeHistory,
 } from '@/lib/api';
-import type { Fill, LedgerUpdate, LighterAccount, LighterExplorerLog, OstiumPosition } from '@/lib/api';
+import type { Fill, LedgerUpdate, LighterAccount, LighterExplorerLog, OstiumTradeHistoryEntry } from '@/lib/api';
 import PositionsTable from '@/components/PositionsTable';
 import BalancesTable from '@/components/BalancesTable';
 import TransactionHistoryTable from '@/components/TransactionHistoryTable';
 
 export const revalidate = 10;
 
+function formatOstiumTradeSummary(trade: OstiumTradeHistoryEntry) {
+  const market = `${trade.pairFrom}-${trade.pairTo}`;
+  const action = trade.isOpen ? 'opened' : 'closed';
+  const price = trade.closePrice > 0 ? trade.closePrice : trade.entryPrice;
+  return `${trade.side} ${market} ${action} @ ${formatCurrency(price)} (${formatCurrency(trade.size)} notional)`;
+}
+
 export default async function AccountPage({ params }: { params: Promise<{ address: string }> }) {
   const { address } = await params;
 
-  const [exchanges, hlAccount, hlFills, hlContexts, hlLedger, lighterAccounts, lighterAssetPrices, lighterLogs, ostiumPositions] = await Promise.all([
+  const [exchanges, hlAccount, hlFills, hlContexts, hlLedger, lighterAccounts, lighterAssetPrices, lighterLogs, ostiumPositions, ostiumTradeHistory] = await Promise.all([
     getTopExchanges(),
     getHyperliquidAccount(address),
     getHyperliquidFills(address),
@@ -33,6 +41,7 @@ export default async function AccountPage({ params }: { params: Promise<{ addres
     getLighterAssetPriceMap(),
     getLighterLogsForAddress(address),
     getOstiumPositions(address),
+    getOstiumTradeHistory(address),
   ]);
 
   const assetPriceMap: Record<string, number> = { USDC: 1, USD: 1, ...lighterAssetPrices };
@@ -47,7 +56,7 @@ export default async function AccountPage({ params }: { params: Promise<{ addres
 
   const hasHyperliquidData = Boolean(hlAccount && hlAccount.marginSummary);
   const hasLighterData = lighterAccounts.length > 0;
-  const hasOstiumData = ostiumPositions.length > 0;
+  const hasOstiumData = ostiumPositions.length > 0 || ostiumTradeHistory.length > 0;
   const hasData = hasHyperliquidData || hasLighterData || hasOstiumData;
 
   let totalValue = 0;
@@ -147,6 +156,7 @@ export default async function AccountPage({ params }: { params: Promise<{ addres
   if (hasOstiumData) {
     const ostiumCollateral = ostiumPositions.reduce((sum, p) => sum + p.collateral, 0);
     totalValue += ostiumCollateral;
+    totalMarginUsed += ostiumCollateral;
 
     ostiumPositions.forEach((pos, idx) => {
       unrealizedPnl += pos.pnl;
@@ -163,11 +173,13 @@ export default async function AccountPage({ params }: { params: Promise<{ addres
       });
     });
 
-    balances.push({
-      exchange: 'Ostium',
-      asset: 'USDC Collateral',
-      amount: ostiumCollateral,
-    });
+    if (ostiumCollateral > 0) {
+      balances.push({
+        exchange: 'Ostium',
+        asset: 'USDC Collateral',
+        amount: ostiumCollateral,
+      });
+    }
   }
 
   const lighterAccountIndexes = new Set(lighterAccounts.map((account) => account.index.toString()));
@@ -277,11 +289,22 @@ export default async function AccountPage({ params }: { params: Promise<{ addres
     };
   });
 
-  const allTransactions = [...fillTxs, ...ledgerTxs, ...lighterTxs].sort((a, b) => b.time - a.time);
+  const ostiumTxs = ostiumTradeHistory.map((trade) => ({
+    hash: `ostium-trade-${trade.id}`,
+    time: trade.timestamp,
+    type: 'trade' as const,
+    summary: formatOstiumTradeSummary(trade),
+    amount: trade.size,
+    exchange: 'Ostium',
+  }));
+
+  const allTransactions = [...fillTxs, ...ledgerTxs, ...lighterTxs, ...ostiumTxs].sort((a, b) => b.time - a.time);
   const marginUsage = totalValue > 0 ? (totalMarginUsed / totalValue) * 100 : 0;
-  const activeExchanges = ['Hyperliquid', 'Lighter'].filter((exchange) =>
-    exchange === 'Hyperliquid' ? hasHyperliquidData : hasLighterData
-  );
+  const activeExchanges = [
+    hasHyperliquidData ? 'Hyperliquid' : null,
+    hasLighterData ? 'Lighter' : null,
+    hasOstiumData ? 'Ostium' : null,
+  ].filter((exchange): exchange is string => Boolean(exchange));
   const exchangeMeta = {
     Hyperliquid: {
       name: 'Hyperliquid',
@@ -292,6 +315,10 @@ export default async function AccountPage({ params }: { params: Promise<{ addres
       name: 'Lighter',
       href: '/exchanges/lighter',
       logo: '/brands/lighter-iconmark.svg',
+    },
+    Ostium: {
+      name: 'Ostium',
+      href: '/exchanges/ostium',
     },
   };
   const exchangeStatuses = [
@@ -306,6 +333,15 @@ export default async function AccountPage({ params }: { params: Promise<{ addres
       detail: hasLighterData
         ? `Loaded ${lighterAccounts.length} sub-account${lighterAccounts.length === 1 ? '' : 's'}.`
         : 'Lighter public APIs return account not found for this address.',
+    },
+    {
+      name: 'Ostium',
+      found: hasOstiumData,
+      detail: hasOstiumData
+        ? ostiumPositions.length > 0
+          ? `Loaded ${ostiumPositions.length} open position${ostiumPositions.length === 1 ? '' : 's'} and ${ostiumTradeHistory.length} historical trade${ostiumTradeHistory.length === 1 ? '' : 's'}.`
+          : `No open positions, but loaded ${ostiumTradeHistory.length} historical trade${ostiumTradeHistory.length === 1 ? '' : 's'}.`
+        : 'No Ostium positions or trade history found for this address.',
     },
   ];
 
@@ -368,7 +404,7 @@ export default async function AccountPage({ params }: { params: Promise<{ addres
           <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5" />
           <div className="text-sm">
             <p className="font-semibold mb-1">No Account Data Found</p>
-            <p>This address has no positions or balance on Hyperliquid or Lighter.</p>
+            <p>This address has no public positions, balances, or trade history on Hyperliquid, Lighter, or Ostium.</p>
           </div>
         </div>
       )}

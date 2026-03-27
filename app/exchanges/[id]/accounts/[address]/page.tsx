@@ -1,13 +1,66 @@
 import Link from 'next/link';
 import { ArrowLeft, Wallet, Activity, Shield, CheckCircle2, AlertCircle } from 'lucide-react';
-import { getTopExchanges, getHyperliquidAccount, getLighterAccounts, getLighterAssetPriceMap, getOstiumPositions } from '@/lib/api';
-import type { LighterAccount, OstiumPosition } from '@/lib/api';
+import { getTopExchanges, getHyperliquidAccount, getLighterAccounts, getLighterAssetPriceMap, getOstiumPositions, getOstiumTradeHistory } from '@/lib/api';
+import type { LighterAccount, OstiumTradeHistoryEntry } from '@/lib/api';
 import { parseNumber, toArray, formatCurrency } from '@/lib/utils';
 import { getLeverageFromMarginFraction } from '@/lib/exchanges/lighter';
 
 export const dynamic = 'force-dynamic';
 
 const supportedAccountExchanges = ['hyperliquid', '5507', 'lighter', 'ostium'];
+
+function renderOstiumTradeHistory(trades: OstiumTradeHistoryEntry[]) {
+  if (trades.length === 0) {
+    return (
+      <div className="rounded-xl border border-border bg-card p-8 text-center text-muted-foreground">
+        No historical trades found.
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-xl border border-border bg-card overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm text-left">
+          <thead className="text-xs text-muted-foreground uppercase bg-secondary/50 border-b border-border">
+            <tr>
+              <th className="px-6 py-4 font-medium">Time</th>
+              <th className="px-6 py-4 font-medium">Market</th>
+              <th className="px-6 py-4 font-medium">Side</th>
+              <th className="px-6 py-4 font-medium text-right">Collateral</th>
+              <th className="px-6 py-4 font-medium text-right">Size</th>
+              <th className="px-6 py-4 font-medium text-right">Entry Price</th>
+              <th className="px-6 py-4 font-medium text-right">Exit Price</th>
+              <th className="px-6 py-4 font-medium text-right">Realized PnL</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {trades.map((trade) => (
+              <tr key={trade.id} className="hover:bg-muted/50 transition-colors">
+                <td className="px-6 py-4 text-muted-foreground text-xs font-mono">
+                  {new Date(trade.timestamp).toLocaleString()}
+                </td>
+                <td className="px-6 py-4 font-medium">{trade.pairFrom}-{trade.pairTo}</td>
+                <td className="px-6 py-4">
+                  <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${trade.side === 'Long' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-destructive/10 text-destructive'}`}>
+                    {trade.side} {trade.leverage.toFixed(1)}x
+                  </span>
+                </td>
+                <td className="px-6 py-4 text-right font-mono">{formatCurrency(trade.collateral)}</td>
+                <td className="px-6 py-4 text-right font-mono">{formatCurrency(trade.size)}</td>
+                <td className="px-6 py-4 text-right font-mono">{formatCurrency(trade.entryPrice)}</td>
+                <td className="px-6 py-4 text-right font-mono">{formatCurrency(trade.closePrice)}</td>
+                <td className={`px-6 py-4 text-right font-mono font-medium ${trade.pnl >= 0 ? 'text-emerald-500' : 'text-destructive'}`}>
+                  {trade.pnl >= 0 ? '+' : ''}{formatCurrency(trade.pnl)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
 
 export default async function ExchangeAccountPage({ params }: { params: Promise<{ id: string, address: string }> }) {
   const { id, address } = await params;
@@ -222,9 +275,12 @@ export default async function ExchangeAccountPage({ params }: { params: Promise<
   }
 
   if (isOstium) {
-    const ostiumPositions = await getOstiumPositions(address);
+    const [ostiumPositions, ostiumTradeHistory] = await Promise.all([
+      getOstiumPositions(address),
+      getOstiumTradeHistory(address),
+    ]);
 
-    if (ostiumPositions.length === 0) {
+    if (ostiumPositions.length === 0 && ostiumTradeHistory.length === 0) {
       return (
         <div className="container mx-auto px-4 py-8 max-w-screen-2xl">
           <Link href={`/accounts/${address}`} className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground mb-8 transition-colors">
@@ -235,7 +291,7 @@ export default async function ExchangeAccountPage({ params }: { params: Promise<
             <AlertCircle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
             <h2 className="text-2xl font-bold mb-2">No Account Data</h2>
             <p className="text-muted-foreground">
-              Could not find open positions for this address on Ostium.
+              Could not find positions or trade history for this address on Ostium.
             </p>
           </div>
         </div>
@@ -245,6 +301,7 @@ export default async function ExchangeAccountPage({ params }: { params: Promise<
     const totalCollateral = ostiumPositions.reduce((sum, p) => sum + p.collateral, 0);
     const totalPnl = ostiumPositions.reduce((sum, p) => sum + p.pnl, 0);
     const totalNotional = ostiumPositions.reduce((sum, p) => sum + p.size, 0);
+    const historicalTradeCount = ostiumTradeHistory.length;
 
     return (
       <div className="container mx-auto px-4 py-8 max-w-screen-2xl">
@@ -277,7 +334,7 @@ export default async function ExchangeAccountPage({ params }: { params: Promise<
           </div>
         </div>
 
-        <section className="grid gap-4 md:grid-cols-3 mb-16">
+        <section className="grid gap-4 md:grid-cols-4 mb-16">
           <div className="rounded-xl border border-border bg-card text-card-foreground shadow p-6">
             <div className="flex flex-row items-center justify-between space-y-0 pb-2">
               <h3 className="tracking-tight text-sm font-medium">Total Collateral</h3>
@@ -302,47 +359,65 @@ export default async function ExchangeAccountPage({ params }: { params: Promise<
             </div>
             <div className="text-3xl font-bold font-mono">{formatCurrency(totalNotional)}</div>
           </div>
+          <div className="rounded-xl border border-border bg-card text-card-foreground shadow p-6">
+            <div className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <h3 className="tracking-tight text-sm font-medium">Historical Trades</h3>
+              <Activity className="h-4 w-4 text-muted-foreground" />
+            </div>
+            <div className="text-3xl font-bold font-mono">{historicalTradeCount.toLocaleString()}</div>
+          </div>
         </section>
 
         <div className="space-y-8">
           <section>
             <h2 className="text-2xl font-bold tracking-tight mb-4">Open Positions</h2>
-            <div className="rounded-xl border border-border bg-card overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm text-left">
-                  <thead className="text-xs text-muted-foreground uppercase bg-secondary/50 border-b border-border">
-                    <tr>
-                      <th className="px-6 py-4 font-medium">Market</th>
-                      <th className="px-6 py-4 font-medium">Side</th>
-                      <th className="px-6 py-4 font-medium text-right">Collateral</th>
-                      <th className="px-6 py-4 font-medium text-right">Size</th>
-                      <th className="px-6 py-4 font-medium text-right">Entry Price</th>
-                      <th className="px-6 py-4 font-medium text-right">Mark Price</th>
-                      <th className="px-6 py-4 font-medium text-right">Unrealized PnL</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
-                    {ostiumPositions.map((pos) => (
-                      <tr key={pos.id} className="hover:bg-muted/50 transition-colors">
-                        <td className="px-6 py-4 font-medium">{pos.pairFrom}-{pos.pairTo}</td>
-                        <td className="px-6 py-4">
-                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${pos.side === 'Long' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-destructive/10 text-destructive'}`}>
-                            {pos.side} {pos.leverage.toFixed(0)}x
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 text-right font-mono">{formatCurrency(pos.collateral)}</td>
-                        <td className="px-6 py-4 text-right font-mono">{formatCurrency(pos.size)}</td>
-                        <td className="px-6 py-4 text-right font-mono">{formatCurrency(pos.entryPrice)}</td>
-                        <td className="px-6 py-4 text-right font-mono">{formatCurrency(pos.currentPrice)}</td>
-                        <td className={`px-6 py-4 text-right font-mono font-medium ${pos.pnl >= 0 ? 'text-emerald-500' : 'text-destructive'}`}>
-                          {pos.pnl >= 0 ? '+' : ''}{formatCurrency(pos.pnl)}
-                        </td>
+            {ostiumPositions.length > 0 ? (
+              <div className="rounded-xl border border-border bg-card overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm text-left">
+                    <thead className="text-xs text-muted-foreground uppercase bg-secondary/50 border-b border-border">
+                      <tr>
+                        <th className="px-6 py-4 font-medium">Market</th>
+                        <th className="px-6 py-4 font-medium">Side</th>
+                        <th className="px-6 py-4 font-medium text-right">Collateral</th>
+                        <th className="px-6 py-4 font-medium text-right">Size</th>
+                        <th className="px-6 py-4 font-medium text-right">Entry Price</th>
+                        <th className="px-6 py-4 font-medium text-right">Mark Price</th>
+                        <th className="px-6 py-4 font-medium text-right">Unrealized PnL</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {ostiumPositions.map((pos) => (
+                        <tr key={pos.id} className="hover:bg-muted/50 transition-colors">
+                          <td className="px-6 py-4 font-medium">{pos.pairFrom}-{pos.pairTo}</td>
+                          <td className="px-6 py-4">
+                            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${pos.side === 'Long' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-destructive/10 text-destructive'}`}>
+                              {pos.side} {pos.leverage.toFixed(1)}x
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-right font-mono">{formatCurrency(pos.collateral)}</td>
+                          <td className="px-6 py-4 text-right font-mono">{formatCurrency(pos.size)}</td>
+                          <td className="px-6 py-4 text-right font-mono">{formatCurrency(pos.entryPrice)}</td>
+                          <td className="px-6 py-4 text-right font-mono">{formatCurrency(pos.currentPrice)}</td>
+                          <td className={`px-6 py-4 text-right font-mono font-medium ${pos.pnl >= 0 ? 'text-emerald-500' : 'text-destructive'}`}>
+                            {pos.pnl >= 0 ? '+' : ''}{formatCurrency(pos.pnl)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="rounded-xl border border-border bg-card p-8 text-center text-muted-foreground">
+                No open positions.
+              </div>
+            )}
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-bold tracking-tight mb-4">Trade History</h2>
+            {renderOstiumTradeHistory(ostiumTradeHistory)}
           </section>
         </div>
       </div>

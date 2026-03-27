@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { ArrowLeft, ExternalLink, ArrowRightLeft, TrendingUp, TrendingDown, Landmark, AlertTriangle } from 'lucide-react';
-import { getHyperliquidFills, getHyperliquidLedgerUpdates, getLighterLog, getLighterSubAccounts } from '@/lib/api';
-import type { Fill, LedgerUpdate, LighterExplorerLog } from '@/lib/api';
+import { getHyperliquidFills, getHyperliquidLedgerUpdates, getLighterLog, getLighterSubAccounts, getOstiumTradeById } from '@/lib/api';
+import type { Fill, LedgerUpdate, LighterExplorerLog, OstiumTradeHistoryEntry } from '@/lib/api';
 import { formatCurrency } from '@/lib/utils';
 
 export const revalidate = 60;
@@ -22,12 +22,14 @@ function lighterLogTouchesAccount(log: LighterExplorerLog, accountIndexes: Set<s
 
 export default async function TransactionDetailPage({ params }: { params: Promise<{ address: string; hash: string }> }) {
   const { address, hash } = await params;
+  const ostiumTradeId = hash.startsWith('ostium-trade-') ? hash.slice('ostium-trade-'.length) : null;
 
-  const [fills, ledger, lighterSubAccounts, lighterLog] = await Promise.all([
+  const [fills, ledger, lighterSubAccounts, lighterLog, ostiumTrade] = await Promise.all([
     getHyperliquidFills(address, 2000),
     getHyperliquidLedgerUpdates(address),
     getLighterSubAccounts(address),
     getLighterLog(hash),
+    ostiumTradeId ? getOstiumTradeById(ostiumTradeId) : Promise.resolve(null),
   ]);
 
   const matchingFills = fills.filter((f: Fill) => f.hash === hash);
@@ -35,7 +37,7 @@ export default async function TransactionDetailPage({ params }: { params: Promis
   const lighterAccountIndexes = new Set(lighterSubAccounts.map((subAccount) => subAccount.index.toString()));
   const matchingLighterLog = lighterLog && lighterLogTouchesAccount(lighterLog, lighterAccountIndexes, address) ? lighterLog : null;
 
-  if (matchingFills.length === 0 && !matchingLedger && !matchingLighterLog) {
+  if (matchingFills.length === 0 && !matchingLedger && !matchingLighterLog && !ostiumTrade) {
     return (
       <div className="container mx-auto px-4 py-8 max-w-screen-2xl">
         <Link href={`/accounts/${address}`} className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground mb-8 transition-colors">
@@ -57,7 +59,10 @@ export default async function TransactionDetailPage({ params }: { params: Promis
     ? matchingFills[0].time
     : matchingLedger
       ? matchingLedger.time
-      : new Date(matchingLighterLog!.time).getTime();
+      : matchingLighterLog
+        ? new Date(matchingLighterLog.time).getTime()
+        : ostiumTrade!.timestamp;
+  const heading = ostiumTrade ? `Ostium Trade ${ostiumTrade.id}` : hash;
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-screen-2xl">
@@ -72,6 +77,8 @@ export default async function TransactionDetailPage({ params }: { params: Promis
           <div className="flex items-center gap-3 mb-2">
             {matchingFills.length > 0 ? (
               <span className="inline-flex items-center rounded-full px-3 py-1 text-sm font-semibold bg-blue-500/10 text-blue-500">Trade</span>
+            ) : ostiumTrade ? (
+              <span className="inline-flex items-center rounded-full px-3 py-1 text-sm font-semibold bg-blue-500/10 text-blue-500">Ostium Trade</span>
             ) : matchingLighterLog ? (
               <LighterTypeBadge log={matchingLighterLog} accountIndexes={lighterAccountIndexes} />
             ) : (
@@ -81,15 +88,21 @@ export default async function TransactionDetailPage({ params }: { params: Promis
               {new Date(timestamp).toLocaleString()}
             </span>
           </div>
-          <h1 className="text-xl font-bold tracking-tight font-mono break-all">{hash}</h1>
+          <h1 className="text-xl font-bold tracking-tight font-mono break-all">{heading}</h1>
         </div>
         <a
-          href={matchingLighterLog ? `https://app.lighter.xyz/explorer/logs/${hash}` : `https://hypurrscan.io/tx/${hash}`}
+          href={
+            ostiumTrade
+              ? `https://www.ostiscan.xyz/traders/${address}`
+              : matchingLighterLog
+                ? `https://app.lighter.xyz/explorer/logs/${hash}`
+                : `https://hypurrscan.io/tx/${hash}`
+          }
           target="_blank"
           rel="noopener noreferrer"
           className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground h-10 px-6 shrink-0"
         >
-          {matchingLighterLog ? 'View on Lighter Explorer' : 'View on Hypurrscan'}
+          {ostiumTrade ? 'View on Ostiscan' : matchingLighterLog ? 'View on Lighter Explorer' : 'View on Hypurrscan'}
           <ExternalLink className="ml-2 h-4 w-4" />
         </a>
       </div>
@@ -104,6 +117,57 @@ export default async function TransactionDetailPage({ params }: { params: Promis
       {matchingLighterLog && matchingFills.length === 0 && !matchingLedger && (
         <LighterLogDetail log={matchingLighterLog} accountIndexes={lighterAccountIndexes} />
       )}
+
+      {/* Ostium detail */}
+      {ostiumTrade && matchingFills.length === 0 && !matchingLedger && !matchingLighterLog && (
+        <OstiumTradeDetail trade={ostiumTrade} />
+      )}
+    </div>
+  );
+}
+
+function OstiumTradeDetail({ trade }: { trade: OstiumTradeHistoryEntry }) {
+  return (
+    <div className="space-y-6">
+      <div className="rounded-xl border border-border bg-card p-6">
+        <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
+          {trade.side === 'Long' ? (
+            <TrendingUp className="h-5 w-5 text-emerald-500" />
+          ) : (
+            <TrendingDown className="h-5 w-5 text-destructive" />
+          )}
+          Trade Details
+        </h2>
+        <div className="divide-y divide-border">
+          <DetailRow label="Market">
+            <Link href={`/exchanges/ostium/markets/${trade.pairFrom.toLowerCase()}`} className="text-primary hover:underline">
+              {trade.pairFrom}-{trade.pairTo}
+            </Link>
+          </DetailRow>
+          <DetailRow label="Direction">
+            <span className={trade.side === 'Long' ? 'text-emerald-500' : 'text-destructive'}>
+              {trade.side}
+            </span>
+          </DetailRow>
+          <DetailRow label="Collateral">{formatCurrency(trade.collateral)}</DetailRow>
+          <DetailRow label="Notional Value">{formatCurrency(trade.size)}</DetailRow>
+          <DetailRow label="Leverage">{trade.leverage.toFixed(1)}x</DetailRow>
+          <DetailRow label="Entry Price">{formatCurrency(trade.entryPrice)}</DetailRow>
+          <DetailRow label="Exit Price">{formatCurrency(trade.closePrice)}</DetailRow>
+          <DetailRow label="Funding">
+            <span className="font-mono text-muted-foreground">{formatCurrency(trade.funding)}</span>
+          </DetailRow>
+          <DetailRow label="Rollover">
+            <span className="font-mono text-muted-foreground">{formatCurrency(trade.rollover)}</span>
+          </DetailRow>
+          <DetailRow label="Realized PnL">
+            <span className={`font-mono font-medium ${trade.pnl >= 0 ? 'text-emerald-500' : 'text-destructive'}`}>
+              {trade.pnl >= 0 ? '+' : ''}{formatCurrency(trade.pnl)}
+            </span>
+          </DetailRow>
+          <DetailRow label="Exchange">Ostium</DetailRow>
+        </div>
+      </div>
     </div>
   );
 }
