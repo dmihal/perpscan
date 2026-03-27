@@ -60,6 +60,35 @@ interface OstiumTrade {
   timestamp: string;
 }
 
+interface OstiumOrder {
+  id: string;
+  trader: string;
+  pair: OstiumTradePair | null;
+  tradeID: string;
+  orderType: string;
+  orderAction: string;
+  price: string;
+  priceAfterImpact: string;
+  collateral: string;
+  notional: string;
+  tradeNotional: string;
+  leverage: string;
+  isBuy: boolean;
+  initiatedAt: string;
+  executedAt: string | null;
+  initiatedTx: string;
+  executedTx: string | null;
+  isPending: boolean;
+  isCancelled: boolean;
+  amountSentToTrader: string;
+  devFee: string;
+  vaultFee: string;
+  oracleFee: string;
+  liquidationFee: string;
+  fundingFee: string;
+  rolloverFee: string;
+}
+
 export interface OstiumPosition {
   id: string;
   pairIndex: string;
@@ -79,20 +108,25 @@ export interface OstiumPosition {
 
 export interface OstiumTradeHistoryEntry {
   id: string;
+  tradeId: string;
   pairIndex: string;
   pairFrom: string;
   pairTo: string;
   side: string;
+  action: string;
+  orderType: string;
   size: number;
   collateral: number;
   leverage: number;
-  entryPrice: number;
-  closePrice: number;
+  price: number;
+  priceAfterImpact: number;
+  fees: number;
   pnl: number;
-  funding: number;
-  rollover: number;
+  amountSentToTrader: number;
   timestamp: number;
-  isOpen: boolean;
+  txHash: string;
+  initiatedTxHash: string;
+  executedTxHash: string;
 }
 
 function ostiumBigInt(value: string, decimals: number): number {
@@ -102,6 +136,14 @@ function ostiumBigInt(value: string, decimals: number): number {
 }
 
 function getOstiumPairData(pair: OstiumTrade['pair']) {
+  return {
+    id: pair?.id || '',
+    from: pair?.from || '',
+    to: pair?.to || '',
+  };
+}
+
+function getOstiumOrderPairData(pair: OstiumOrder['pair']) {
   return {
     id: pair?.id || '',
     from: pair?.from || '',
@@ -135,6 +177,47 @@ function calculateOstiumPnl({
   const priceChange = (exitPrice - entryPrice) / entryPrice;
   const grossPnl = size * (isBuy ? priceChange : -priceChange);
   return grossPnl - funding - rollover;
+}
+
+function getOstiumOrderFees(order: OstiumOrder) {
+  return [
+    order.devFee,
+    order.vaultFee,
+    order.oracleFee,
+    order.liquidationFee,
+    order.fundingFee,
+    order.rolloverFee,
+  ].reduce((sum, fee) => sum + ostiumBigInt(fee, 6), 0);
+}
+
+function mapOstiumOrder(order: OstiumOrder): OstiumTradeHistoryEntry {
+  const pair = getOstiumOrderPairData(order.pair);
+  const collateral = ostiumBigInt(order.collateral, 6);
+  const size = ostiumBigInt(order.notional, 6);
+  const amountSentToTrader = ostiumBigInt(order.amountSentToTrader, 6);
+
+  return {
+    id: order.id,
+    tradeId: order.tradeID,
+    pairIndex: pair.id,
+    pairFrom: pair.from,
+    pairTo: pair.to,
+    side: order.isBuy ? 'Long' : 'Short',
+    action: order.orderAction,
+    orderType: order.orderType,
+    size,
+    collateral,
+    leverage: getOstiumTradeLeverage(collateral, size, order.leverage),
+    price: ostiumBigInt(order.price, 18),
+    priceAfterImpact: ostiumBigInt(order.priceAfterImpact, 18),
+    fees: getOstiumOrderFees(order),
+    pnl: amountSentToTrader > 0 ? amountSentToTrader - collateral : 0,
+    amountSentToTrader,
+    timestamp: Number(order.executedAt || order.initiatedAt) * 1000,
+    txHash: order.executedTx || order.initiatedTx,
+    initiatedTxHash: order.initiatedTx,
+    executedTxHash: order.executedTx || '',
+  };
 }
 
 async function ostiumSubgraphQuery<T>(query: string): Promise<T | null> {
@@ -371,104 +454,76 @@ export async function getOstiumPositions(address: string): Promise<OstiumPositio
 
 export async function getOstiumTradeHistory(address: string): Promise<OstiumTradeHistoryEntry[]> {
   const lowerAddress = address.toLowerCase();
-  const tradesData = await ostiumSubgraphQuery<{ trades: OstiumTrade[] }>(`{
-    trades(
-      where: { trader: "${lowerAddress}", isOpen: false }
+  const ordersData = await ostiumSubgraphQuery<{ orders: OstiumOrder[] }>(`{
+    orders(
+      where: { trader: "${lowerAddress}", isPending: false, isCancelled: false }
       first: 100
-      orderBy: timestamp
+      orderBy: executedAt
       orderDirection: desc
     ) {
-      id trader tradeID openPrice closePrice
-      collateral notional leverage isBuy isOpen funding rollover timestamp
+      id trader tradeID orderType orderAction
+      price priceAfterImpact collateral notional tradeNotional leverage isBuy
+      initiatedAt executedAt initiatedTx executedTx isPending isCancelled
+      amountSentToTrader devFee vaultFee oracleFee liquidationFee fundingFee rolloverFee
       pair { id from to }
     }
   }`);
 
-  if (!tradesData?.trades?.length) return [];
+  if (!ordersData?.orders?.length) return [];
 
-  return tradesData.trades.map(trade => {
-    const pair = getOstiumPairData(trade.pair);
-    const entryPrice = ostiumBigInt(trade.openPrice, 18);
-    const closePrice = ostiumBigInt(trade.closePrice, 18);
-    const collateral = ostiumBigInt(trade.collateral, 6);
-    const size = ostiumBigInt(trade.notional, 6) || collateral * ostiumBigInt(trade.leverage, 3);
-    const leverage = getOstiumTradeLeverage(collateral, size, trade.leverage);
-    const funding = ostiumBigInt(trade.funding, 18);
-    const rollover = ostiumBigInt(trade.rollover, 18);
+  return ordersData.orders.map(mapOstiumOrder);
+}
 
-    return {
-      id: trade.id,
-      pairIndex: pair.id,
-      pairFrom: pair.from,
-      pairTo: pair.to,
-      side: trade.isBuy ? 'Long' : 'Short',
-      size,
-      collateral,
-      leverage,
-      entryPrice,
-      closePrice,
-      pnl: calculateOstiumPnl({
-        entryPrice,
-        exitPrice: closePrice,
-        size,
-        isBuy: trade.isBuy,
-        funding,
-        rollover,
-      }),
-      funding,
-      rollover,
-      timestamp: Number(trade.timestamp) * 1000,
-      isOpen: trade.isOpen,
-    };
-  });
+export async function getOstiumOrderByTxHash(txHash: string): Promise<OstiumTradeHistoryEntry | null> {
+  const normalizedTxHash = txHash.toLowerCase().replace(/[^a-f0-9x]/g, '');
+  if (!normalizedTxHash) return null;
+
+  const executedOrderData = await ostiumSubgraphQuery<{ orders: OstiumOrder[] }>(`{
+    orders(where: { executedTx: "${normalizedTxHash}" }, first: 1) {
+      id trader tradeID orderType orderAction
+      price priceAfterImpact collateral notional tradeNotional leverage isBuy
+      initiatedAt executedAt initiatedTx executedTx isPending isCancelled
+      amountSentToTrader devFee vaultFee oracleFee liquidationFee fundingFee rolloverFee
+      pair { id from to }
+    }
+  }`);
+
+  const executedOrder = executedOrderData?.orders?.[0];
+  if (executedOrder) return mapOstiumOrder(executedOrder);
+
+  const initiatedOrderData = await ostiumSubgraphQuery<{ orders: OstiumOrder[] }>(`{
+    orders(where: { initiatedTx: "${normalizedTxHash}" }, first: 1) {
+      id trader tradeID orderType orderAction
+      price priceAfterImpact collateral notional tradeNotional leverage isBuy
+      initiatedAt executedAt initiatedTx executedTx isPending isCancelled
+      amountSentToTrader devFee vaultFee oracleFee liquidationFee fundingFee rolloverFee
+      pair { id from to }
+    }
+  }`);
+
+  const initiatedOrder = initiatedOrderData?.orders?.[0];
+  return initiatedOrder ? mapOstiumOrder(initiatedOrder) : null;
 }
 
 export async function getOstiumTradeById(tradeId: string): Promise<OstiumTradeHistoryEntry | null> {
   const normalizedTradeId = tradeId.replace(/[^a-zA-Z0-9_-]/g, '');
   if (!normalizedTradeId) return null;
 
-  const tradesData = await ostiumSubgraphQuery<{ trades: OstiumTrade[] }>(`{
-    trades(where: { id: "${normalizedTradeId}" }, first: 1) {
-      id trader tradeID openPrice closePrice
-      collateral notional leverage isBuy isOpen funding rollover timestamp
+  const ordersData = await ostiumSubgraphQuery<{ orders: OstiumOrder[] }>(`{
+    orders(
+      where: { tradeID: "${normalizedTradeId}", isPending: false, isCancelled: false }
+      first: 10
+      orderBy: executedAt
+      orderDirection: desc
+    ) {
+      id trader tradeID orderType orderAction
+      price priceAfterImpact collateral notional tradeNotional leverage isBuy
+      initiatedAt executedAt initiatedTx executedTx isPending isCancelled
+      amountSentToTrader devFee vaultFee oracleFee liquidationFee fundingFee rolloverFee
       pair { id from to }
     }
   }`);
 
-  const trade = tradesData?.trades?.[0];
-  if (!trade) return null;
-
-  const pair = getOstiumPairData(trade.pair);
-  const entryPrice = ostiumBigInt(trade.openPrice, 18);
-  const closePrice = ostiumBigInt(trade.closePrice, 18);
-  const collateral = ostiumBigInt(trade.collateral, 6);
-  const size = ostiumBigInt(trade.notional, 6) || collateral * ostiumBigInt(trade.leverage, 3);
-  const leverage = getOstiumTradeLeverage(collateral, size, trade.leverage);
-  const funding = ostiumBigInt(trade.funding, 18);
-  const rollover = ostiumBigInt(trade.rollover, 18);
-
-  return {
-    id: trade.id,
-    pairIndex: pair.id,
-    pairFrom: pair.from,
-    pairTo: pair.to,
-    side: trade.isBuy ? 'Long' : 'Short',
-    size,
-    collateral,
-    leverage,
-    entryPrice,
-    closePrice,
-    pnl: calculateOstiumPnl({
-      entryPrice,
-      exitPrice: closePrice,
-      size,
-      isBuy: trade.isBuy,
-      funding,
-      rollover,
-    }),
-    funding,
-    rollover,
-    timestamp: Number(trade.timestamp) * 1000,
-    isOpen: trade.isOpen,
-  };
+  const order = ordersData?.orders?.[0];
+  return order ? mapOstiumOrder(order) : null;
 }

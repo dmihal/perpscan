@@ -26,11 +26,11 @@ function renderOstiumTradeHistory(trades: OstiumTradeHistoryEntry[]) {
             <tr>
               <th className="px-6 py-4 font-medium">Time</th>
               <th className="px-6 py-4 font-medium">Market</th>
+              <th className="px-6 py-4 font-medium">Action</th>
               <th className="px-6 py-4 font-medium">Side</th>
-              <th className="px-6 py-4 font-medium text-right">Collateral</th>
               <th className="px-6 py-4 font-medium text-right">Size</th>
-              <th className="px-6 py-4 font-medium text-right">Entry Price</th>
-              <th className="px-6 py-4 font-medium text-right">Exit Price</th>
+              <th className="px-6 py-4 font-medium text-right">Price</th>
+              <th className="px-6 py-4 font-medium text-right">Fees</th>
               <th className="px-6 py-4 font-medium text-right">Realized PnL</th>
             </tr>
           </thead>
@@ -41,15 +41,15 @@ function renderOstiumTradeHistory(trades: OstiumTradeHistoryEntry[]) {
                   {new Date(trade.timestamp).toLocaleString()}
                 </td>
                 <td className="px-6 py-4 font-medium">{trade.pairFrom}-{trade.pairTo}</td>
+                <td className="px-6 py-4">{trade.action}</td>
                 <td className="px-6 py-4">
                   <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${trade.side === 'Long' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-destructive/10 text-destructive'}`}>
                     {trade.side} {trade.leverage.toFixed(1)}x
                   </span>
                 </td>
-                <td className="px-6 py-4 text-right font-mono">{formatCurrency(trade.collateral)}</td>
                 <td className="px-6 py-4 text-right font-mono">{formatCurrency(trade.size)}</td>
-                <td className="px-6 py-4 text-right font-mono">{formatCurrency(trade.entryPrice)}</td>
-                <td className="px-6 py-4 text-right font-mono">{formatCurrency(trade.closePrice)}</td>
+                <td className="px-6 py-4 text-right font-mono">{formatCurrency(trade.price)}</td>
+                <td className="px-6 py-4 text-right font-mono text-muted-foreground">{formatCurrency(trade.fees)}</td>
                 <td className={`px-6 py-4 text-right font-mono font-medium ${trade.pnl >= 0 ? 'text-emerald-500' : 'text-destructive'}`}>
                   {trade.pnl >= 0 ? '+' : ''}{formatCurrency(trade.pnl)}
                 </td>

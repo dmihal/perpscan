@@ -23,9 +23,7 @@ export const revalidate = 10;
 
 function formatOstiumTradeSummary(trade: OstiumTradeHistoryEntry) {
   const market = `${trade.pairFrom}-${trade.pairTo}`;
-  const action = trade.isOpen ? 'opened' : 'closed';
-  const price = trade.closePrice > 0 ? trade.closePrice : trade.entryPrice;
-  return `${trade.side} ${market} ${action} @ ${formatCurrency(price)} (${formatCurrency(trade.size)} notional)`;
+  return `${trade.action} ${market} @ ${formatCurrency(trade.price)} (${formatCurrency(trade.size)} notional)`;
 }
 
 export default async function AccountPage({ params }: { params: Promise<{ address: string }> }) {
@@ -290,7 +288,7 @@ export default async function AccountPage({ params }: { params: Promise<{ addres
   });
 
   const ostiumTxs = ostiumTradeHistory.map((trade) => ({
-    hash: `ostium-trade-${trade.id}`,
+    hash: trade.txHash,
     time: trade.timestamp,
     type: 'trade' as const,
     summary: formatOstiumTradeSummary(trade),

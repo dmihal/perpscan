@@ -7,7 +7,7 @@ export type { LighterSubAccount, LighterAccountAsset, LighterAccountPosition, Li
 
 export { getParadexMarkets, getParadexCandles, getParadexFundingHistory } from './exchanges/paradex';
 
-export { getOstiumMarkets, getOstiumExchangeStats, getOstiumPositions, getOstiumTradeHistory, getOstiumTradeById } from './exchanges/ostium';
+export { getOstiumMarkets, getOstiumExchangeStats, getOstiumPositions, getOstiumTradeHistory, getOstiumTradeById, getOstiumOrderByTxHash } from './exchanges/ostium';
 export type { OstiumPosition, OstiumTradeHistoryEntry } from './exchanges/ostium';
 
 // Shared types
