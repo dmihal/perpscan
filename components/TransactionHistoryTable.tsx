@@ -1,5 +1,7 @@
 'use client';
 
+import Image from 'next/image';
+import Link from 'next/link';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSortable } from '@/hooks/use-sortable';
@@ -17,6 +19,7 @@ interface UnifiedTransaction {
 interface TransactionHistoryTableProps {
   transactions: UnifiedTransaction[];
   address: string;
+  exchangeMeta: Record<string, { name: string; href: string; logo?: string }>;
 }
 
 const formatCurrency = (value: number) =>
@@ -59,7 +62,7 @@ const OTHER_TYPES: UnifiedTransaction['type'][] = ['liquidation', 'staking', 'va
 
 const PAGE_SIZE = 20;
 
-export default function TransactionHistoryTable({ transactions, address }: TransactionHistoryTableProps) {
+export default function TransactionHistoryTable({ transactions, address, exchangeMeta }: TransactionHistoryTableProps) {
   const router = useRouter();
   const [filter, setFilter] = useState<FilterKey>('all');
   const [page, setPage] = useState(0);
@@ -106,6 +109,7 @@ export default function TransactionHistoryTable({ transactions, address }: Trans
             <thead className="text-xs text-muted-foreground uppercase bg-secondary/50 border-b border-border">
               <tr>
                 <SortableHeader label="Time" sortKey="time" currentSortKey={sortKey} sortOrder={sortOrder} onSort={toggleSort} />
+                <SortableHeader label="Exchange" sortKey="exchange" currentSortKey={sortKey} sortOrder={sortOrder} onSort={toggleSort} />
                 <th className="px-6 py-4 font-medium">Type</th>
                 <SortableHeader label="Summary" sortKey="summary" currentSortKey={sortKey} sortOrder={sortOrder} onSort={toggleSort} />
                 <SortableHeader label="Amount" sortKey="amount" currentSortKey={sortKey} sortOrder={sortOrder} onSort={toggleSort} align="right" />
@@ -120,6 +124,9 @@ export default function TransactionHistoryTable({ transactions, address }: Trans
                 >
                   <td className="px-6 py-4 text-muted-foreground text-xs font-mono">
                     {new Date(tx.time).toLocaleString()}
+                  </td>
+                  <td className="px-6 py-4">
+                    <ExchangeCell transaction={tx} exchangeMeta={exchangeMeta} />
                   </td>
                   <td className="px-6 py-4">
                     <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${TYPE_BADGE_STYLES[tx.type]}`}>
@@ -161,5 +168,42 @@ export default function TransactionHistoryTable({ transactions, address }: Trans
         </div>
       )}
     </div>
+  );
+}
+
+function ExchangeCell({
+  transaction,
+  exchangeMeta,
+}: {
+  transaction: UnifiedTransaction;
+  exchangeMeta: Record<string, { name: string; href: string; logo?: string }>;
+}) {
+  const meta = exchangeMeta[transaction.exchange] || {
+    name: transaction.exchange,
+    href: `/exchanges/${transaction.exchange.toLowerCase()}`,
+  };
+
+  return (
+    <Link
+      href={meta.href}
+      onClick={(event) => event.stopPropagation()}
+      className="inline-flex items-center gap-3 hover:underline"
+    >
+      {meta.logo ? (
+        <Image
+          src={meta.logo}
+          alt={meta.name}
+          width={24}
+          height={24}
+          className="rounded-full"
+          referrerPolicy="no-referrer"
+        />
+      ) : (
+        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-secondary text-[10px] font-semibold text-secondary-foreground">
+          {meta.name.slice(0, 1)}
+        </div>
+      )}
+      <span className="font-medium">{meta.name}</span>
+    </Link>
   );
 }

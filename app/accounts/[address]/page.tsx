@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { ArrowLeft, Wallet, ExternalLink, Activity, Shield, AlertTriangle } from 'lucide-react';
 import {
+  getTopExchanges,
   getHyperliquidAccount,
   getHyperliquidFills,
   getHyperliquidContexts,
@@ -43,7 +44,8 @@ export default async function AccountPage({ params }: { params: Promise<{ addres
   const formatCurrency = (value: number) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
 
-  const [hlAccount, hlFills, hlContexts, hlLedger, lighterAccounts, lighterAssetPrices, lighterLogs] = await Promise.all([
+  const [exchanges, hlAccount, hlFills, hlContexts, hlLedger, lighterAccounts, lighterAssetPrices, lighterLogs] = await Promise.all([
+    getTopExchanges(),
     getHyperliquidAccount(address),
     getHyperliquidFills(address),
     getHyperliquidContexts(),
@@ -273,6 +275,18 @@ export default async function AccountPage({ params }: { params: Promise<{ addres
   const activeExchanges = ['Hyperliquid', 'Lighter'].filter((exchange) =>
     exchange === 'Hyperliquid' ? hasHyperliquidData : hasLighterData
   );
+  const exchangeMeta = {
+    Hyperliquid: {
+      name: 'Hyperliquid',
+      href: '/exchanges/hyperliquid',
+      logo: exchanges.find((exchange) => exchange.defillamaId === 'hyperliquid')?.logo,
+    },
+    Lighter: {
+      name: 'Lighter',
+      href: '/exchanges/lighter',
+      logo: '/brands/lighter-iconmark.svg',
+    },
+  };
   const exchangeStatuses = [
     {
       name: 'Hyperliquid',
@@ -407,15 +421,8 @@ export default async function AccountPage({ params }: { params: Promise<{ addres
       )}
 
       <section className="mt-8">
-        <div className="flex items-center justify-between gap-4 mb-4">
-          <h2 className="text-2xl font-bold tracking-tight">Transaction History</h2>
-          {hasLighterData && (
-            <p className="text-sm text-muted-foreground">
-              Lighter history comes from public explorer logs and may omit some recipient-side transfers.
-            </p>
-          )}
-        </div>
-        <TransactionHistoryTable transactions={allTransactions} address={address} />
+        <h2 className="text-2xl font-bold tracking-tight mb-4">Transaction History</h2>
+        <TransactionHistoryTable transactions={allTransactions} address={address} exchangeMeta={exchangeMeta} />
       </section>
     </div>
   );
