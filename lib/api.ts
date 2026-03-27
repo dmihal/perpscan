@@ -48,6 +48,41 @@ export interface VenueMarket {
 
 const LIGHTER_BASE_URL = 'https://mainnet.zklighter.elliot.ai/api/v1';
 const LIGHTER_VENUE_NAME = 'Lighter';
+const KECCAK_64_MASK = (BigInt(1) << BigInt(64)) - BigInt(1);
+const KECCAK_RATE_BYTES = 136;
+const KECCAK_ROUND_CONSTANTS = [
+  BigInt('0x0000000000000001'),
+  BigInt('0x0000000000008082'),
+  BigInt('0x800000000000808a'),
+  BigInt('0x8000000080008000'),
+  BigInt('0x000000000000808b'),
+  BigInt('0x0000000080000001'),
+  BigInt('0x8000000080008081'),
+  BigInt('0x8000000000008009'),
+  BigInt('0x000000000000008a'),
+  BigInt('0x0000000000000088'),
+  BigInt('0x0000000080008009'),
+  BigInt('0x000000008000000a'),
+  BigInt('0x000000008000808b'),
+  BigInt('0x800000000000008b'),
+  BigInt('0x8000000000008089'),
+  BigInt('0x8000000000008003'),
+  BigInt('0x8000000000008002'),
+  BigInt('0x8000000000000080'),
+  BigInt('0x000000000000800a'),
+  BigInt('0x800000008000000a'),
+  BigInt('0x8000000080008081'),
+  BigInt('0x8000000000008080'),
+  BigInt('0x0000000080000001'),
+  BigInt('0x8000000080008008'),
+] as const;
+const KECCAK_ROTATION_OFFSETS = [
+  0, 1, 62, 28, 27,
+  36, 44, 6, 55, 20,
+  3, 10, 43, 25, 39,
+  41, 45, 15, 21, 8,
+  18, 2, 61, 56, 14,
+] as const;
 
 interface LighterMarketConfig {
   trading_hours?: string;
@@ -138,6 +173,108 @@ function parseNumber(value: unknown): number {
     return Number.isFinite(parsed) ? parsed : 0;
   }
   return 0;
+}
+
+function rotateLeft64(value: bigint, shift: number): bigint {
+  if (shift === 0) return value & KECCAK_64_MASK;
+  const offset = BigInt(shift);
+  return ((value << offset) | (value >> (BigInt(64) - offset))) & KECCAK_64_MASK;
+}
+
+function keccakF1600(state: bigint[]): void {
+  for (const roundConstant of KECCAK_ROUND_CONSTANTS) {
+    const c = new Array<bigint>(5).fill(BigInt(0));
+    for (let x = 0; x < 5; x++) {
+      c[x] = state[x] ^ state[x + 5] ^ state[x + 10] ^ state[x + 15] ^ state[x + 20];
+    }
+
+    const d = new Array<bigint>(5).fill(BigInt(0));
+    for (let x = 0; x < 5; x++) {
+      d[x] = c[(x + 4) % 5] ^ rotateLeft64(c[(x + 1) % 5], 1);
+    }
+
+    for (let y = 0; y < 5; y++) {
+      for (let x = 0; x < 5; x++) {
+        state[x + 5 * y] = (state[x + 5 * y] ^ d[x]) & KECCAK_64_MASK;
+      }
+    }
+
+    const b = new Array<bigint>(25).fill(BigInt(0));
+    for (let y = 0; y < 5; y++) {
+      for (let x = 0; x < 5; x++) {
+        const index = x + 5 * y;
+        const targetX = y;
+        const targetY = (2 * x + 3 * y) % 5;
+        b[targetX + 5 * targetY] = rotateLeft64(state[index], KECCAK_ROTATION_OFFSETS[index]);
+      }
+    }
+
+    for (let y = 0; y < 5; y++) {
+      for (let x = 0; x < 5; x++) {
+        const index = x + 5 * y;
+        const b1 = b[((x + 1) % 5) + 5 * y];
+        const b2 = b[((x + 2) % 5) + 5 * y];
+        state[index] = (b[index] ^ ((~b1 & KECCAK_64_MASK) & b2)) & KECCAK_64_MASK;
+      }
+    }
+
+    state[0] = (state[0] ^ roundConstant) & KECCAK_64_MASK;
+  }
+}
+
+function keccak256Hex(input: string): string {
+  const bytes = new TextEncoder().encode(input);
+  const state = new Array<bigint>(25).fill(BigInt(0));
+
+  for (let offset = 0; offset < bytes.length; offset += KECCAK_RATE_BYTES) {
+    const block = bytes.subarray(offset, offset + KECCAK_RATE_BYTES);
+    for (let i = 0; i < block.length; i++) {
+      const lane = Math.floor(i / 8);
+      const shift = BigInt((i % 8) * 8);
+      state[lane] ^= BigInt(block[i]) << shift;
+    }
+
+    if (block.length === KECCAK_RATE_BYTES) {
+      keccakF1600(state);
+    } else {
+      const lane = Math.floor(block.length / 8);
+      const shift = BigInt((block.length % 8) * 8);
+      state[lane] ^= BigInt(0x01) << shift;
+
+      const finalLane = Math.floor((KECCAK_RATE_BYTES - 1) / 8);
+      const finalShift = BigInt(((KECCAK_RATE_BYTES - 1) % 8) * 8);
+      state[finalLane] ^= BigInt(0x80) << finalShift;
+      keccakF1600(state);
+      break;
+    }
+  }
+
+  let hex = '';
+  for (let i = 0; i < 32; i++) {
+    const lane = Math.floor(i / 8);
+    const shift = BigInt((i % 8) * 8);
+    const byte = Number((state[lane] >> shift) & BigInt(0xff));
+    hex += byte.toString(16).padStart(2, '0');
+  }
+  return hex;
+}
+
+function toLighterL1Address(address: string): string {
+  if (!/^0x[a-fA-F0-9]{40}$/.test(address)) return address;
+  const normalized = address.slice(2).toLowerCase();
+  const hash = keccak256Hex(normalized);
+  let checksummed = '0x';
+
+  for (let i = 0; i < normalized.length; i++) {
+    const char = normalized[i];
+    if (/[0-9]/.test(char)) {
+      checksummed += char;
+      continue;
+    }
+    checksummed += parseInt(hash[i], 16) >= 8 ? char.toUpperCase() : char;
+  }
+
+  return checksummed;
 }
 
 function toArray<T>(value: T[] | Record<string, T> | null | undefined): T[] {
@@ -250,7 +387,7 @@ async function getLighterExchangeStats() {
 
 export async function getLighterSubAccounts(address: string): Promise<LighterSubAccount[]> {
   try {
-    const params = new URLSearchParams({ l1_address: address });
+    const params = new URLSearchParams({ l1_address: toLighterL1Address(address) });
     const res = await fetch(`${LIGHTER_BASE_URL}/accountsByL1Address?${params.toString()}`, {
       next: { revalidate: 10 }
     });

@@ -240,6 +240,20 @@ export default async function AccountPage({ params }: { params: Promise<{ addres
   const activeExchanges = ['Hyperliquid', 'Lighter'].filter((exchange) =>
     exchange === 'Hyperliquid' ? hasHyperliquidData : hasLighterData
   );
+  const exchangeStatuses = [
+    {
+      name: 'Hyperliquid',
+      found: hasHyperliquidData,
+      detail: hasHyperliquidData ? 'Live positions and balances loaded.' : 'No public account state found for this address.',
+    },
+    {
+      name: 'Lighter',
+      found: hasLighterData,
+      detail: hasLighterData
+        ? `Loaded ${lighterAccounts.length} sub-account${lighterAccounts.length === 1 ? '' : 's'}.`
+        : 'Lighter public APIs return account not found for this address.',
+    },
+  ];
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-screen-2xl">
@@ -280,6 +294,20 @@ export default async function AccountPage({ params }: { params: Promise<{ addres
           </a>
         </div>
       </div>
+
+      <section className="grid gap-4 md:grid-cols-2 mb-8">
+        {exchangeStatuses.map((status) => (
+          <div key={status.name} className="rounded-xl border border-border bg-card p-5">
+            <div className="flex items-center justify-between gap-3 mb-2">
+              <h2 className="font-semibold">{status.name}</h2>
+              <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${status.found ? 'bg-emerald-500/10 text-emerald-500' : 'bg-muted text-muted-foreground'}`}>
+                {status.found ? 'Found' : 'Not Found'}
+              </span>
+            </div>
+            <p className="text-sm text-muted-foreground">{status.detail}</p>
+          </div>
+        ))}
+      </section>
 
       {!hasData && (
         <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-4 mb-8 flex items-start gap-3 text-amber-500">
