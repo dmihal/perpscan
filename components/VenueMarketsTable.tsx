@@ -6,15 +6,9 @@ import { ArrowUpRight, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { VenueMarket } from '@/lib/api';
 import { useSortable } from '@/hooks/use-sortable';
 import { SortableHeader } from '@/components/SortableHeader';
+import { formatCurrency } from '@/lib/utils';
 
 const PAGE_SIZE = 50;
-
-const formatCurrency = (value: number | undefined) => {
-  if (!value) return '$0.00';
-  if (value >= 1e9) return `$${(value / 1e9).toFixed(2)}B`;
-  if (value >= 1e6) return `$${(value / 1e6).toFixed(2)}M`;
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
-};
 
 export default function VenueMarketsTable({ markets }: { markets: VenueMarket[] }) {
   const [search, setSearch] = useState('');

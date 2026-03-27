@@ -2,11 +2,9 @@ import Link from 'next/link';
 import { ArrowLeft, ExternalLink, ArrowRightLeft, TrendingUp, TrendingDown, Landmark, AlertTriangle } from 'lucide-react';
 import { getHyperliquidFills, getHyperliquidLedgerUpdates, getLighterLog, getLighterSubAccounts } from '@/lib/api';
 import type { Fill, LedgerUpdate, LighterExplorerLog } from '@/lib/api';
+import { formatCurrency } from '@/lib/utils';
 
 export const revalidate = 60;
-
-const formatCurrency = (value: number) =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
 
 function lighterLogTouchesAccount(log: LighterExplorerLog, accountIndexes: Set<string>, address: string) {
   const deposit = log.pubdata?.l1_deposit_pubdata_v2;

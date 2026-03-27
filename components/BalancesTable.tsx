@@ -3,15 +3,13 @@
 import Link from 'next/link';
 import { useSortable } from '@/hooks/use-sortable';
 import { SortableHeader } from '@/components/SortableHeader';
+import { formatCurrency } from '@/lib/utils';
 
 interface Balance {
   exchange: string;
   asset: string;
   amount: number;
 }
-
-const formatCurrency = (value: number) =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
 
 export default function BalancesTable({
   balances,

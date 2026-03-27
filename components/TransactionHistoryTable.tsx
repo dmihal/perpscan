@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSortable } from '@/hooks/use-sortable';
 import { SortableHeader } from '@/components/SortableHeader';
+import { formatCurrency } from '@/lib/utils';
 
 interface UnifiedTransaction {
   hash: string;
@@ -21,9 +22,6 @@ interface TransactionHistoryTableProps {
   address: string;
   exchangeMeta: Record<string, { name: string; href: string; logo?: string }>;
 }
-
-const formatCurrency = (value: number) =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
 
 const TYPE_BADGE_STYLES: Record<UnifiedTransaction['type'], string> = {
   trade: 'bg-blue-500/10 text-blue-500',

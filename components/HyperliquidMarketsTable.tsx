@@ -6,6 +6,7 @@ import { ArrowUpRight, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { VenueMarket } from '@/lib/api';
 import { useSortable } from '@/hooks/use-sortable';
 import { SortableHeader } from '@/components/SortableHeader';
+import { formatCurrency } from '@/lib/utils';
 
 const PAGE_SIZE = 50;
 
@@ -27,13 +28,6 @@ export default function HyperliquidMarketsTable({ markets }: { markets: VenueMar
   const totalPages = Math.ceil(sortedData.length / PAGE_SIZE);
   const safePage = Math.min(page, Math.max(totalPages - 1, 0));
   const pageData = sortedData.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
-
-  const formatCurrency = (value: number | undefined) => {
-    if (!value) return '$0.00';
-    if (value >= 1e9) return `$${(value / 1e9).toFixed(2)}B`;
-    if (value >= 1e6) return `$${(value / 1e6).toFixed(2)}M`;
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
-  };
 
   return (
     <div>

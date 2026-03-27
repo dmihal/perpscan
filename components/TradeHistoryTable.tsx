@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useSortable } from '@/hooks/use-sortable';
 import { SortableHeader } from '@/components/SortableHeader';
+import { formatCurrency } from '@/lib/utils';
 
 interface Trade {
   coin: string;
@@ -14,9 +15,6 @@ interface Trade {
   closedPnl: number;
   dir: string;
 }
-
-const formatCurrency = (value: number) =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
 
 const PAGE_SIZE = 20;
 

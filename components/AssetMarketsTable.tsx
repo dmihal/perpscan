@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { ArrowUpRight } from 'lucide-react';
 import { useSortable } from '@/hooks/use-sortable';
 import { SortableHeader } from '@/components/SortableHeader';
+import { formatCurrency } from '@/lib/utils';
 
 interface AssetMarket {
   id: string;
@@ -15,13 +16,6 @@ interface AssetMarket {
   fundingRate: number;
   spread: number;
 }
-
-const formatCurrency = (value: number | undefined) => {
-  if (!value) return '$0.00';
-  if (value >= 1e9) return `$${(value / 1e9).toFixed(2)}B`;
-  if (value >= 1e6) return `$${(value / 1e6).toFixed(2)}M`;
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
-};
 
 export default function AssetMarketsTable({
   markets,

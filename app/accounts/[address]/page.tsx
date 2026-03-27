@@ -1,5 +1,7 @@
 import Link from 'next/link';
 import { ArrowLeft, Wallet, ExternalLink, Activity, Shield, AlertTriangle } from 'lucide-react';
+import { parseNumber, toArray, formatCurrency } from '@/lib/utils';
+import { getLeverageFromMarginFraction } from '@/lib/exchanges/lighter';
 import {
   getTopExchanges,
   getHyperliquidAccount,
@@ -18,32 +20,8 @@ import TransactionHistoryTable from '@/components/TransactionHistoryTable';
 
 export const revalidate = 10;
 
-function parseNumber(value: string | number | undefined): number {
-  if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
-  if (typeof value === 'string') {
-    const parsed = parseFloat(value);
-    return Number.isFinite(parsed) ? parsed : 0;
-  }
-  return 0;
-}
-
-function toArray<T>(value: T[] | Record<string, T> | undefined): T[] {
-  if (!value) return [];
-  return Array.isArray(value) ? value : Object.values(value);
-}
-
-function getLighterLeverage(initialMarginFraction?: string): number {
-  const marginFraction = parseNumber(initialMarginFraction);
-  if (marginFraction <= 0) return 1;
-  const leverage = marginFraction > 1 ? 100 / marginFraction : 1 / marginFraction;
-  return Number.isFinite(leverage) && leverage > 0 ? leverage : 1;
-}
-
 export default async function AccountPage({ params }: { params: Promise<{ address: string }> }) {
   const { address } = await params;
-
-  const formatCurrency = (value: number) =>
-    new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
 
   const [exchanges, hlAccount, hlFills, hlContexts, hlLedger, lighterAccounts, lighterAssetPrices, lighterLogs, ostiumPositions] = await Promise.all([
     getTopExchanges(),
@@ -138,7 +116,7 @@ export default async function AccountPage({ params }: { params: Promise<{ addres
         entryPrice: parseNumber(position.avg_entry_price),
         markPrice: Number.isFinite(markPrice) && markPrice > 0 ? markPrice : parseNumber(position.avg_entry_price),
         pnl,
-        leverage: getLighterLeverage(position.initial_margin_fraction),
+        leverage: getLeverageFromMarginFraction(position.initial_margin_fraction),
       });
     });
 

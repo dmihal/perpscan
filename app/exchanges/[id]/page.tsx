@@ -6,6 +6,7 @@ import { getTopExchanges, getAllVenueMarkets, getExchangeVolumeHistory } from '@
 import HyperliquidMarketsTable from '@/components/HyperliquidMarketsTable';
 import VenueMarketsTable from '@/components/VenueMarketsTable';
 import VolumeBarChart from '@/components/VolumeBarChart';
+import { formatCurrency } from '@/lib/utils';
 
 export const revalidate = 60;
 
@@ -35,13 +36,6 @@ export default async function ExchangePage({ params }: { params: Promise<{ id: s
       </div>
     );
   }
-
-  const formatCurrency = (value: number | undefined) => {
-    if (!value) return '$0.00';
-    if (value >= 1e9) return `$${(value / 1e9).toFixed(2)}B`;
-    if (value >= 1e6) return `$${(value / 1e6).toFixed(2)}M`;
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
-  };
 
   const venueNameMap: Record<string, string> = {
     'hyperliquid': 'Hyperliquid',

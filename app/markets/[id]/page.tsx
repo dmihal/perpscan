@@ -2,6 +2,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { ArrowLeft, ExternalLink, Activity, BarChart3, TrendingUp, Shield } from 'lucide-react';
 import { getMarket } from '@/lib/api';
+import { formatCurrency } from '@/lib/utils';
 
 export const revalidate = 60;
 
@@ -20,13 +21,6 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
       </div>
     );
   }
-
-  const formatCurrency = (value: number | undefined) => {
-    if (!value) return '$0.00';
-    if (value >= 1e9) return `$${(value / 1e9).toFixed(2)}B`;
-    if (value >= 1e6) return `$${(value / 1e6).toFixed(2)}M`;
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
-  };
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-screen-2xl">

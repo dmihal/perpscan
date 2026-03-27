@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useSortable } from '@/hooks/use-sortable';
 import { SortableHeader } from '@/components/SortableHeader';
+import { formatCurrency } from '@/lib/utils';
 
 interface Position {
   id: string;
@@ -15,9 +16,6 @@ interface Position {
   pnl: number;
   leverage: number;
 }
-
-const formatCurrency = (value: number) =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
 
 export default function PositionsTable({
   positions,

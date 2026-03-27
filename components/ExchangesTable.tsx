@@ -7,13 +7,7 @@ import { ArrowUpRight, Search } from 'lucide-react';
 import { Protocol } from '@/lib/api';
 import { useSortable } from '@/hooks/use-sortable';
 import { SortableHeader } from '@/components/SortableHeader';
-
-const formatCurrency = (value: number | undefined) => {
-  if (!value) return '$0.00';
-  if (value >= 1e9) return `$${(value / 1e9).toFixed(2)}B`;
-  if (value >= 1e6) return `$${(value / 1e6).toFixed(2)}M`;
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
-};
+import { formatCurrency } from '@/lib/utils';
 
 export default function ExchangesTable({ exchanges }: { exchanges: Protocol[] }) {
   const [search, setSearch] = useState('');

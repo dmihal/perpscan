@@ -4,6 +4,7 @@ import { ArrowLeft, Activity, BarChart3, TrendingUp, Shield, Percent, ArrowUpRig
 import { getAllVenueMarkets, getHyperliquidCandles, getHyperliquidFundingHistory, getLighterMarketSpread, getParadexCandles, getParadexFundingHistory, getTopExchanges } from '@/lib/api';
 import PriceLineChart from '@/components/PriceLineChart';
 import FundingRateChart from '@/components/FundingRateChart';
+import { formatCurrency } from '@/lib/utils';
 
 export const revalidate = 60;
 
@@ -80,12 +81,6 @@ export default async function ExchangeMarketPage({ params }: { params: Promise<{
   };
   const tradeUrl = exchangeTradeUrls[id] || exchangeTradeUrls[exchange?.defillamaId || ''];
 
-  const formatCurrency = (value: number | undefined) => {
-    if (!value) return '$0.00';
-    if (value >= 1e9) return `$${(value / 1e9).toFixed(2)}B`;
-    if (value >= 1e6) return `$${(value / 1e6).toFixed(2)}M`;
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
-  };
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-screen-2xl">
