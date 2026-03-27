@@ -7,8 +7,9 @@ import {
   getHyperliquidLedgerUpdates,
   getLighterAccounts,
   getLighterAssetPriceMap,
+  getLighterLogsForAddress,
 } from '@/lib/api';
-import type { Fill, LedgerUpdate, LighterAccount } from '@/lib/api';
+import type { Fill, LedgerUpdate, LighterAccount, LighterExplorerLog } from '@/lib/api';
 import PositionsTable from '@/components/PositionsTable';
 import BalancesTable from '@/components/BalancesTable';
 import TransactionHistoryTable from '@/components/TransactionHistoryTable';
@@ -42,13 +43,14 @@ export default async function AccountPage({ params }: { params: Promise<{ addres
   const formatCurrency = (value: number) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
 
-  const [hlAccount, hlFills, hlContexts, hlLedger, lighterAccounts, lighterAssetPrices] = await Promise.all([
+  const [hlAccount, hlFills, hlContexts, hlLedger, lighterAccounts, lighterAssetPrices, lighterLogs] = await Promise.all([
     getHyperliquidAccount(address),
     getHyperliquidFills(address),
     getHyperliquidContexts(),
     getHyperliquidLedgerUpdates(address),
     getLighterAccounts(address),
     getLighterAssetPriceMap(),
+    getLighterLogsForAddress(address),
   ]);
 
   const assetPriceMap: Record<string, number> = { USDC: 1, USD: 1, ...lighterAssetPrices };
@@ -153,11 +155,13 @@ export default async function AccountPage({ params }: { params: Promise<{ addres
     if (!addedBalanceRow && accountValue > 0) {
       balances.push({
         exchange: 'Lighter',
-        asset: `Account ${account.index}`,
+        asset: 'USDC Collateral',
         amount: accountValue,
       });
     }
   });
+
+  const lighterAccountIndexes = new Set(lighterAccounts.map((account) => account.index.toString()));
 
   const fillTxs = hlFills.map((f: Fill) => ({
     hash: f.hash,
@@ -235,7 +239,36 @@ export default async function AccountPage({ params }: { params: Promise<{ addres
     return { hash: u.hash, time: u.time, type, summary, amount, exchange: 'Hyperliquid' };
   });
 
-  const allTransactions = [...fillTxs, ...ledgerTxs].sort((a, b) => b.time - a.time);
+  const lighterTxs = lighterLogs.map((log: LighterExplorerLog) => {
+    const deposit = log.pubdata?.l1_deposit_pubdata_v2;
+    const transfer = log.pubdata?.l2_transfer_pubdata_v2;
+    let type: 'deposit' | 'transfer' = 'transfer';
+    let summary = `Lighter ${log.tx_type}`;
+    let amount = 0;
+
+    if (deposit) {
+      type = 'deposit';
+      amount = parseNumber(deposit.accepted_amount);
+      summary = `Lighter deposit ${amount.toLocaleString()} ${deposit.asset_index}`;
+    } else if (transfer) {
+      type = 'transfer';
+      amount = parseNumber(transfer.amount);
+      const isOutgoing = lighterAccountIndexes.has(transfer.from_account_index);
+      const counterpartyIndex = isOutgoing ? transfer.to_account_index : transfer.from_account_index;
+      summary = `${isOutgoing ? 'Lighter transfer out' : 'Lighter transfer in'} ${amount.toLocaleString()} ${transfer.asset_index} ${isOutgoing ? 'to' : 'from'} acct ${counterpartyIndex}`;
+    }
+
+    return {
+      hash: log.hash,
+      time: new Date(log.time).getTime(),
+      type,
+      summary,
+      amount,
+      exchange: 'Lighter',
+    };
+  });
+
+  const allTransactions = [...fillTxs, ...ledgerTxs, ...lighterTxs].sort((a, b) => b.time - a.time);
   const marginUsage = totalValue > 0 ? (totalMarginUsed / totalValue) * 100 : 0;
   const activeExchanges = ['Hyperliquid', 'Lighter'].filter((exchange) =>
     exchange === 'Hyperliquid' ? hasHyperliquidData : hasLighterData
@@ -378,7 +411,7 @@ export default async function AccountPage({ params }: { params: Promise<{ addres
           <h2 className="text-2xl font-bold tracking-tight">Transaction History</h2>
           {hasLighterData && (
             <p className="text-sm text-muted-foreground">
-              Lighter does not expose public account history, so this section shows Hyperliquid activity only.
+              Lighter history comes from public explorer logs and may omit some recipient-side transfers.
             </p>
           )}
         </div>

@@ -1,25 +1,43 @@
 import Link from 'next/link';
 import { ArrowLeft, ExternalLink, ArrowRightLeft, TrendingUp, TrendingDown, Landmark, AlertTriangle } from 'lucide-react';
-import { getHyperliquidFills, getHyperliquidLedgerUpdates } from '@/lib/api';
-import type { Fill, LedgerUpdate } from '@/lib/api';
+import { getHyperliquidFills, getHyperliquidLedgerUpdates, getLighterLog, getLighterSubAccounts } from '@/lib/api';
+import type { Fill, LedgerUpdate, LighterExplorerLog } from '@/lib/api';
 
 export const revalidate = 60;
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
 
+function lighterLogTouchesAccount(log: LighterExplorerLog, accountIndexes: Set<string>, address: string) {
+  const deposit = log.pubdata?.l1_deposit_pubdata_v2;
+  if (deposit) {
+    return accountIndexes.has(deposit.account_index) || deposit.l1_address.toLowerCase() === address.toLowerCase();
+  }
+
+  const transfer = log.pubdata?.l2_transfer_pubdata_v2;
+  if (transfer) {
+    return accountIndexes.has(transfer.from_account_index) || accountIndexes.has(transfer.to_account_index);
+  }
+
+  return false;
+}
+
 export default async function TransactionDetailPage({ params }: { params: Promise<{ address: string; hash: string }> }) {
   const { address, hash } = await params;
 
-  const [fills, ledger] = await Promise.all([
+  const [fills, ledger, lighterSubAccounts, lighterLog] = await Promise.all([
     getHyperliquidFills(address, 2000),
     getHyperliquidLedgerUpdates(address),
+    getLighterSubAccounts(address),
+    getLighterLog(hash),
   ]);
 
   const matchingFills = fills.filter((f: Fill) => f.hash === hash);
   const matchingLedger = ledger.find((u: LedgerUpdate) => u.hash === hash);
+  const lighterAccountIndexes = new Set(lighterSubAccounts.map((subAccount) => subAccount.index.toString()));
+  const matchingLighterLog = lighterLog && lighterLogTouchesAccount(lighterLog, lighterAccountIndexes, address) ? lighterLog : null;
 
-  if (matchingFills.length === 0 && !matchingLedger) {
+  if (matchingFills.length === 0 && !matchingLedger && !matchingLighterLog) {
     return (
       <div className="container mx-auto px-4 py-8 max-w-screen-2xl">
         <Link href={`/accounts/${address}`} className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground mb-8 transition-colors">
@@ -30,14 +48,18 @@ export default async function TransactionDetailPage({ params }: { params: Promis
           <AlertTriangle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
           <h2 className="text-2xl font-bold mb-2">Transaction Not Found</h2>
           <p className="text-muted-foreground">
-            Could not find a transaction with this hash for this account. It may be outside the 90-day window.
+            Could not find a transaction with this hash for this account.
           </p>
         </div>
       </div>
     );
   }
 
-  const timestamp = matchingFills.length > 0 ? matchingFills[0].time : matchingLedger!.time;
+  const timestamp = matchingFills.length > 0
+    ? matchingFills[0].time
+    : matchingLedger
+      ? matchingLedger.time
+      : new Date(matchingLighterLog!.time).getTime();
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-screen-2xl">
@@ -52,6 +74,8 @@ export default async function TransactionDetailPage({ params }: { params: Promis
           <div className="flex items-center gap-3 mb-2">
             {matchingFills.length > 0 ? (
               <span className="inline-flex items-center rounded-full px-3 py-1 text-sm font-semibold bg-blue-500/10 text-blue-500">Trade</span>
+            ) : matchingLighterLog ? (
+              <LighterTypeBadge log={matchingLighterLog} accountIndexes={lighterAccountIndexes} />
             ) : (
               <TypeBadge type={matchingLedger!.delta.type} />
             )}
@@ -62,12 +86,12 @@ export default async function TransactionDetailPage({ params }: { params: Promis
           <h1 className="text-xl font-bold tracking-tight font-mono break-all">{hash}</h1>
         </div>
         <a
-          href={`https://hypurrscan.io/tx/${hash}`}
+          href={matchingLighterLog ? `https://app.lighter.xyz/explorer/logs/${hash}` : `https://hypurrscan.io/tx/${hash}`}
           target="_blank"
           rel="noopener noreferrer"
           className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground h-10 px-6 shrink-0"
         >
-          View on Hypurrscan
+          {matchingLighterLog ? 'View on Lighter Explorer' : 'View on Hypurrscan'}
           <ExternalLink className="ml-2 h-4 w-4" />
         </a>
       </div>
@@ -77,7 +101,40 @@ export default async function TransactionDetailPage({ params }: { params: Promis
 
       {/* Ledger detail */}
       {matchingLedger && matchingFills.length === 0 && <LedgerDetail update={matchingLedger} address={address} />}
+
+      {/* Lighter detail */}
+      {matchingLighterLog && matchingFills.length === 0 && !matchingLedger && (
+        <LighterLogDetail log={matchingLighterLog} accountIndexes={lighterAccountIndexes} />
+      )}
     </div>
+  );
+}
+
+function LighterTypeBadge({ log, accountIndexes }: { log: LighterExplorerLog; accountIndexes: Set<string> }) {
+  const deposit = log.pubdata?.l1_deposit_pubdata_v2;
+  const transfer = log.pubdata?.l2_transfer_pubdata_v2;
+
+  if (deposit) {
+    return (
+      <span className="inline-flex items-center rounded-full px-3 py-1 text-sm font-semibold bg-emerald-500/10 text-emerald-500">
+        Lighter Deposit
+      </span>
+    );
+  }
+
+  if (transfer) {
+    const isOutgoing = accountIndexes.has(transfer.from_account_index);
+    return (
+      <span className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-semibold ${isOutgoing ? 'bg-purple-500/10 text-purple-500' : 'bg-sky-500/10 text-sky-500'}`}>
+        {isOutgoing ? 'Lighter Transfer Out' : 'Lighter Transfer In'}
+      </span>
+    );
+  }
+
+  return (
+    <span className="inline-flex items-center rounded-full px-3 py-1 text-sm font-semibold bg-secondary text-secondary-foreground">
+      Lighter Log
+    </span>
   );
 }
 
@@ -408,6 +465,66 @@ function LedgerDetail({ update, address }: { update: LedgerUpdate; address: stri
         )}
 
         <DetailRow label="Exchange">Hyperliquid</DetailRow>
+      </div>
+    </div>
+  );
+}
+
+function LighterLogDetail({ log, accountIndexes }: { log: LighterExplorerLog; accountIndexes: Set<string> }) {
+  const deposit = log.pubdata?.l1_deposit_pubdata_v2;
+  const transfer = log.pubdata?.l2_transfer_pubdata_v2;
+
+  return (
+    <div className="rounded-xl border border-border bg-card p-6">
+      <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
+        {(deposit || transfer) && <ArrowRightLeft className="h-5 w-5 text-purple-500" />}
+        Lighter Explorer Details
+      </h2>
+      <div className="divide-y divide-border">
+        <DetailRow label="Exchange">Lighter</DetailRow>
+        <DetailRow label="Type">{log.tx_type}</DetailRow>
+        {log.status && <DetailRow label="Status">{log.status}</DetailRow>}
+        {log.block_number !== undefined && <DetailRow label="Block">{log.block_number}</DetailRow>}
+        {log.batch_number !== undefined && <DetailRow label="Batch">{log.batch_number}</DetailRow>}
+
+        {deposit && (
+          <>
+            <DetailRow label="Asset">{deposit.asset_index}</DetailRow>
+            <DetailRow label="Amount">
+              <span className="font-mono text-emerald-500">+{deposit.accepted_amount} {deposit.asset_index}</span>
+            </DetailRow>
+            <DetailRow label="Route">{deposit.route_type}</DetailRow>
+            <DetailRow label="Account Index">
+              <span className="font-mono">{deposit.account_index}</span>
+            </DetailRow>
+            <DetailRow label="Address">
+              <span className="font-mono text-xs">{deposit.l1_address}</span>
+            </DetailRow>
+          </>
+        )}
+
+        {transfer && (
+          <>
+            <DetailRow label="Direction">
+              {accountIndexes.has(transfer.from_account_index) ? 'Outgoing' : 'Incoming'}
+            </DetailRow>
+            <DetailRow label="Asset">{transfer.asset_index}</DetailRow>
+            <DetailRow label="Amount">
+              <span className="font-mono">{transfer.amount} {transfer.asset_index}</span>
+            </DetailRow>
+            <DetailRow label="From Account">
+              <span className="font-mono">{transfer.from_account_index}</span>
+            </DetailRow>
+            <DetailRow label="To Account">
+              <span className="font-mono">{transfer.to_account_index}</span>
+            </DetailRow>
+            <DetailRow label="From Route">{transfer.from_route_type}</DetailRow>
+            <DetailRow label="To Route">{transfer.to_route_type}</DetailRow>
+            <DetailRow label="Fee">
+              <span className="font-mono">{transfer.usdc_fee} USDC</span>
+            </DetailRow>
+          </>
+        )}
       </div>
     </div>
   );

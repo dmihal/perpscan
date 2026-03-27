@@ -156,6 +156,39 @@ export interface LighterAccount {
   assets?: LighterAccountAsset[] | Record<string, LighterAccountAsset>;
 }
 
+interface LighterL1DepositPubdata {
+  account_index: string;
+  l1_address: string;
+  asset_index: string;
+  route_type: string;
+  accepted_amount: string;
+}
+
+interface LighterL2TransferPubdata {
+  from_account_index: string;
+  to_account_index: string;
+  fee_account_index: string;
+  asset_index: string;
+  from_route_type: string;
+  to_route_type: string;
+  amount: string;
+  usdc_fee: string;
+}
+
+export interface LighterExplorerLog {
+  tx_type: string;
+  hash: string;
+  time: string;
+  pubdata?: {
+    l1_deposit_pubdata_v2?: LighterL1DepositPubdata;
+    l2_transfer_pubdata_v2?: LighterL2TransferPubdata;
+  };
+  pubdata_type?: string;
+  block_number?: number;
+  batch_number?: number;
+  status?: string;
+}
+
 interface LighterAssetDetail {
   symbol: string;
   asset_id?: number;
@@ -350,6 +383,35 @@ async function getLighterAssetDetails(): Promise<LighterAssetDetail[]> {
   }
 }
 
+export async function getLighterAccountLogs(accountKey: string | number, limit: number = 100): Promise<LighterExplorerLog[]> {
+  try {
+    const params = new URLSearchParams({ limit: limit.toString() });
+    const res = await fetch(`https://explorer.elliot.ai/api/accounts/${accountKey}/logs?${params.toString()}`, {
+      next: { revalidate: 30 }
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
+  } catch (error) {
+    console.error('Lighter explorer account logs error:', error);
+    return [];
+  }
+}
+
+export async function getLighterLog(hash: string): Promise<LighterExplorerLog | null> {
+  try {
+    const res = await fetch(`https://explorer.elliot.ai/api/logs/${hash}`, {
+      next: { revalidate: 30 }
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data?.hash ? data : null;
+  } catch (error) {
+    console.error('Lighter explorer log error:', error);
+    return null;
+  }
+}
+
 export async function getLighterMarketSpread(marketId: number): Promise<number> {
   try {
     const params = new URLSearchParams({
@@ -427,6 +489,24 @@ export async function getLighterAccounts(address: string): Promise<LighterAccoun
   );
 
   return accounts.filter((account): account is LighterAccount => account !== null);
+}
+
+export async function getLighterLogsForAddress(address: string, limit: number = 100): Promise<LighterExplorerLog[]> {
+  const subAccounts = await getLighterSubAccounts(address);
+  if (subAccounts.length === 0) return [];
+
+  const logsByAccount = await Promise.all(
+    subAccounts.map((subAccount) => getLighterAccountLogs(subAccount.index, limit))
+  );
+
+  const uniqueLogs = new Map<string, LighterExplorerLog>();
+  logsByAccount.flat().forEach((log) => {
+    if (!uniqueLogs.has(log.hash)) uniqueLogs.set(log.hash, log);
+  });
+
+  return Array.from(uniqueLogs.values()).sort(
+    (a, b) => new Date(b.time).getTime() - new Date(a.time).getTime()
+  );
 }
 
 export async function getHyperliquidSpotMeta() {

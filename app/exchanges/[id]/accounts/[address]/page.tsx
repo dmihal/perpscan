@@ -338,7 +338,7 @@ export default async function ExchangeAccountPage({ params }: { params: Promise<
       balances.push({
         id: `lighter-balance-${account.index}-account`,
         subAccount: account.index,
-        asset: 'Account Value',
+        asset: 'USDC Collateral',
         value: accountValue,
       });
     }
