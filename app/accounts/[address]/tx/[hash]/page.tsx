@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { ArrowLeft, ExternalLink, ArrowRightLeft, TrendingUp, TrendingDown, Landmark, AlertTriangle } from 'lucide-react';
-import { getHyperliquidFills, getHyperliquidLedgerUpdates, getLighterLog, getLighterSubAccounts, getOstiumTradeById, getOstiumOrderByTxHash } from '@/lib/api';
-import type { Fill, LedgerUpdate, LighterExplorerLog, OstiumTradeHistoryEntry } from '@/lib/api';
+import { getHyperliquidFills, getHyperliquidLedgerUpdates, getLighterLog, getLighterSubAccounts, getOstiumTradeById, getOstiumOrderByTxHash, getDydxFills, getDydxTransfers, isDydxAddress } from '@/lib/api';
+import type { Fill, LedgerUpdate, LighterExplorerLog, OstiumTradeHistoryEntry, DydxFill, DydxTransfer } from '@/lib/api';
 import { formatCurrency } from '@/lib/utils';
 
 export const revalidate = 60;
@@ -23,14 +23,17 @@ function lighterLogTouchesAccount(log: LighterExplorerLog, accountIndexes: Set<s
 export default async function TransactionDetailPage({ params }: { params: Promise<{ address: string; hash: string }> }) {
   const { address, hash } = await params;
   const ostiumTradeId = hash.startsWith('ostium-trade-') ? hash.slice('ostium-trade-'.length) : null;
+  const isDydx = isDydxAddress(address);
 
-  const [fills, ledger, lighterSubAccounts, lighterLog, ostiumTrade, ostiumOrder] = await Promise.all([
-    getHyperliquidFills(address, 2000),
-    getHyperliquidLedgerUpdates(address),
-    getLighterSubAccounts(address),
-    getLighterLog(hash),
+  const [fills, ledger, lighterSubAccounts, lighterLog, ostiumTrade, ostiumOrder, dydxFills, dydxTransfers] = await Promise.all([
+    isDydx ? Promise.resolve([]) : getHyperliquidFills(address, 2000),
+    isDydx ? Promise.resolve([]) : getHyperliquidLedgerUpdates(address),
+    isDydx ? Promise.resolve([]) : getLighterSubAccounts(address),
+    isDydx ? Promise.resolve(null) : getLighterLog(hash),
     ostiumTradeId ? getOstiumTradeById(ostiumTradeId) : Promise.resolve(null),
-    getOstiumOrderByTxHash(hash),
+    isDydx ? Promise.resolve(null) : getOstiumOrderByTxHash(hash),
+    isDydx ? getDydxFills(address) : Promise.resolve([]),
+    isDydx ? getDydxTransfers(address) : Promise.resolve([]),
   ]);
 
   const matchingFills = fills.filter((f: Fill) => f.hash === hash);
@@ -40,7 +43,18 @@ export default async function TransactionDetailPage({ params }: { params: Promis
 
   const matchingOstiumEntry = ostiumOrder || ostiumTrade;
 
-  if (matchingFills.length === 0 && !matchingLedger && !matchingLighterLog && !matchingOstiumEntry) {
+  const dydxFillId = hash.startsWith('dydx-fill-') ? hash.slice('dydx-fill-'.length) : null;
+  const dydxTransferId = hash.startsWith('dydx-transfer-') ? hash.slice('dydx-transfer-'.length) : null;
+  const matchingDydxFill = dydxFillId ? (dydxFills.find((f: DydxFill) => f.id === dydxFillId) ?? null) : null;
+  const matchingDydxTransfer = isDydx
+    ? (dydxTransfers.find((t: DydxTransfer) =>
+        dydxTransferId
+          ? t.transactionHash === dydxTransferId || t.id === dydxTransferId
+          : t.transactionHash === hash
+      ) ?? null)
+    : null;
+
+  if (matchingFills.length === 0 && !matchingLedger && !matchingLighterLog && !matchingOstiumEntry && !matchingDydxFill && !matchingDydxTransfer) {
     return (
       <div className="container mx-auto px-4 py-8 max-w-screen-2xl">
         <Link href={`/accounts/${address}`} className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground mb-8 transition-colors">
@@ -64,8 +78,18 @@ export default async function TransactionDetailPage({ params }: { params: Promis
       ? matchingLedger.time
       : matchingLighterLog
         ? new Date(matchingLighterLog.time).getTime()
-        : matchingOstiumEntry!.timestamp;
-  const heading = matchingOstiumEntry ? `Ostium ${matchingOstiumEntry.action} Tx` : hash;
+        : matchingOstiumEntry
+          ? matchingOstiumEntry.timestamp
+          : matchingDydxFill
+            ? new Date(matchingDydxFill.createdAt).getTime()
+            : new Date(matchingDydxTransfer!.createdAt).getTime();
+  const heading = matchingOstiumEntry
+    ? `Ostium ${matchingOstiumEntry.action} Tx`
+    : matchingDydxFill
+      ? `dYdX ${matchingDydxFill.side} ${matchingDydxFill.market}`
+      : matchingDydxTransfer
+        ? `dYdX ${matchingDydxTransfer.type}`
+        : hash;
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-screen-2xl">
@@ -82,6 +106,10 @@ export default async function TransactionDetailPage({ params }: { params: Promis
               <span className="inline-flex items-center rounded-full px-3 py-1 text-sm font-semibold bg-blue-500/10 text-blue-500">Trade</span>
             ) : matchingOstiumEntry ? (
               <span className="inline-flex items-center rounded-full px-3 py-1 text-sm font-semibold bg-blue-500/10 text-blue-500">Ostium Order</span>
+            ) : matchingDydxFill ? (
+              <span className="inline-flex items-center rounded-full px-3 py-1 text-sm font-semibold bg-blue-500/10 text-blue-500">dYdX Trade</span>
+            ) : matchingDydxTransfer ? (
+              <DydxTransferBadge type={matchingDydxTransfer.type} />
             ) : matchingLighterLog ? (
               <LighterTypeBadge log={matchingLighterLog} accountIndexes={lighterAccountIndexes} />
             ) : (
@@ -97,15 +125,23 @@ export default async function TransactionDetailPage({ params }: { params: Promis
           href={
             matchingOstiumEntry
               ? `https://arbiscan.io/tx/${hash}`
-              : matchingLighterLog
-                ? `https://app.lighter.xyz/explorer/logs/${hash}`
-                : `https://hypurrscan.io/tx/${hash}`
+              : matchingDydxFill || matchingDydxTransfer
+                ? `https://www.mintscan.io/dydx/address/${address}`
+                : matchingLighterLog
+                  ? `https://app.lighter.xyz/explorer/logs/${hash}`
+                  : `https://hypurrscan.io/tx/${hash}`
           }
           target="_blank"
           rel="noopener noreferrer"
           className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground h-10 px-6 shrink-0"
         >
-          {matchingOstiumEntry ? 'View on Arbiscan' : matchingLighterLog ? 'View on Lighter Explorer' : 'View on Hypurrscan'}
+          {matchingOstiumEntry
+            ? 'View on Arbiscan'
+            : matchingDydxFill || matchingDydxTransfer
+              ? 'View on Mintscan'
+              : matchingLighterLog
+                ? 'View on Lighter Explorer'
+                : 'View on Hypurrscan'}
           <ExternalLink className="ml-2 h-4 w-4" />
         </a>
       </div>
@@ -125,6 +161,12 @@ export default async function TransactionDetailPage({ params }: { params: Promis
       {matchingOstiumEntry && matchingFills.length === 0 && !matchingLedger && !matchingLighterLog && (
         <OstiumTradeDetail trade={matchingOstiumEntry} hash={hash} />
       )}
+
+      {/* dYdX fill detail */}
+      {matchingDydxFill && <DydxFillDetail fill={matchingDydxFill} />}
+
+      {/* dYdX transfer detail */}
+      {matchingDydxTransfer && !matchingDydxFill && <DydxTransferDetail transfer={matchingDydxTransfer} address={address} />}
     </div>
   );
 }
@@ -179,6 +221,97 @@ function OstiumTradeDetail({ trade, hash }: { trade: OstiumTradeHistoryEntry; ha
           </DetailRow>
           <DetailRow label="Exchange">Ostium</DetailRow>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function DydxTransferBadge({ type }: { type: string }) {
+  const styles: Record<string, { className: string; label: string }> = {
+    DEPOSIT: { className: 'bg-emerald-500/10 text-emerald-500', label: 'dYdX Deposit' },
+    WITHDRAWAL: { className: 'bg-orange-500/10 text-orange-500', label: 'dYdX Withdrawal' },
+    TRANSFER_IN: { className: 'bg-sky-500/10 text-sky-500', label: 'dYdX Transfer In' },
+    TRANSFER_OUT: { className: 'bg-purple-500/10 text-purple-500', label: 'dYdX Transfer Out' },
+  };
+  const s = styles[type] || { className: 'bg-secondary text-secondary-foreground', label: `dYdX ${type}` };
+  return <span className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-semibold ${s.className}`}>{s.label}</span>;
+}
+
+function DydxFillDetail({ fill }: { fill: DydxFill }) {
+  const notional = parseFloat(fill.price) * parseFloat(fill.size);
+  return (
+    <div className="space-y-6">
+      <div className="rounded-xl border border-border bg-card p-6">
+        <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
+          {fill.side === 'BUY' ? (
+            <TrendingUp className="h-5 w-5 text-emerald-500" />
+          ) : (
+            <TrendingDown className="h-5 w-5 text-destructive" />
+          )}
+          Trade Details
+        </h2>
+        <div className="divide-y divide-border">
+          <DetailRow label="Market">
+            <Link href={`/exchanges/dydx/markets/${fill.market.replace('/', '-').toLowerCase()}`} className="text-primary hover:underline">
+              {fill.market}
+            </Link>
+          </DetailRow>
+          <DetailRow label="Side">
+            <span className={fill.side === 'BUY' ? 'text-emerald-500' : 'text-destructive'}>{fill.side}</span>
+          </DetailRow>
+          <DetailRow label="Type">{fill.type}</DetailRow>
+          <DetailRow label="Liquidity">{fill.liquidity}</DetailRow>
+          <DetailRow label="Price">{formatCurrency(parseFloat(fill.price))}</DetailRow>
+          <DetailRow label="Size"><span className="font-mono">{parseFloat(fill.size).toString()}</span></DetailRow>
+          <DetailRow label="Notional Value">{formatCurrency(notional)}</DetailRow>
+          <DetailRow label="Fee"><span className="font-mono text-muted-foreground">{formatCurrency(parseFloat(fill.fee))}</span></DetailRow>
+          {fill.subaccountNumber > 0 && <DetailRow label="Subaccount">{fill.subaccountNumber}</DetailRow>}
+          <DetailRow label="Fill ID"><span className="font-mono text-xs break-all">{fill.id}</span></DetailRow>
+          <DetailRow label="Exchange">dYdX</DetailRow>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DydxTransferDetail({ transfer, address }: { transfer: DydxTransfer; address: string }) {
+  const isDeposit = transfer.type === 'DEPOSIT';
+  const isWithdrawal = transfer.type === 'WITHDRAWAL';
+  return (
+    <div className="rounded-xl border border-border bg-card p-6">
+      <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
+        <Landmark className={`h-5 w-5 ${isDeposit ? 'text-emerald-500' : isWithdrawal ? 'text-orange-500' : 'text-purple-500'}`} />
+        Transfer Details
+      </h2>
+      <div className="divide-y divide-border">
+        <DetailRow label="Type">{transfer.type}</DetailRow>
+        <DetailRow label="Amount">
+          <span className={`font-mono ${isDeposit ? 'text-emerald-500' : isWithdrawal ? 'text-orange-500' : ''}`}>
+            {isDeposit ? '+' : isWithdrawal ? '-' : ''}{parseFloat(transfer.size).toLocaleString()} {transfer.symbol}
+          </span>
+        </DetailRow>
+        <DetailRow label="From">
+          {transfer.sender.address ? (
+            <Link href={`/accounts/${transfer.sender.address}`} className="text-primary hover:underline font-mono text-xs">
+              {transfer.sender.address}
+              {transfer.sender.subaccountNumber != null ? ` (sub ${transfer.sender.subaccountNumber})` : ''}
+            </Link>
+          ) : <span className="text-muted-foreground">—</span>}
+        </DetailRow>
+        <DetailRow label="To">
+          {transfer.recipient.address ? (
+            <Link href={`/accounts/${transfer.recipient.address}`} className="text-primary hover:underline font-mono text-xs">
+              {transfer.recipient.address}
+              {transfer.recipient.subaccountNumber != null ? ` (sub ${transfer.recipient.subaccountNumber})` : ''}
+            </Link>
+          ) : <span className="text-muted-foreground">—</span>}
+        </DetailRow>
+        {transfer.transactionHash && (
+          <DetailRow label="Tx Hash">
+            <span className="font-mono text-xs break-all">{transfer.transactionHash}</span>
+          </DetailRow>
+        )}
+        <DetailRow label="Exchange">dYdX</DetailRow>
       </div>
     </div>
   );
