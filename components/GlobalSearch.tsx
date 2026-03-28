@@ -58,7 +58,7 @@ export default function GlobalSearch() {
     const q = query.toLowerCase().trim();
     const results: SearchItem[] = [];
 
-    if (q.startsWith('0x') && q.length >= 6) {
+    if ((q.startsWith('0x') && q.length >= 6) || (q.startsWith('dydx1') && q.length >= 8)) {
       results.push({
         type: 'account',
         label: q.length > 20 ? `${q.slice(0, 10)}...${q.slice(-8)}` : q,

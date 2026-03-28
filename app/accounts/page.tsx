@@ -23,7 +23,7 @@ export default function AccountsPage() {
         </div>
         <h1 className="text-4xl font-bold tracking-tight mb-4">Cross-Exchange Account Search</h1>
         <p className="text-lg text-muted-foreground max-w-2xl">
-          Enter an EVM address to view positions, balances, and history across all supported decentralized perpetual exchanges.
+          Enter a wallet address to view positions, balances, and history across all supported decentralized perpetual exchanges.
         </p>
       </div>
 
@@ -35,11 +35,11 @@ export default function AccountsPage() {
               type="text"
               value={address}
               onChange={(e) => setAddress(e.target.value)}
-              placeholder="Enter EVM Address (0x...)"
+              placeholder="EVM address (0x...) or dYdX address (dydx1...)"
               className="flex h-14 w-full rounded-lg border border-input bg-background px-4 py-2 text-lg shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50 pl-12"
               required
-              pattern="^0x[a-fA-F0-9]{40}$"
-              title="Please enter a valid EVM address starting with 0x"
+              pattern="^(0x[a-fA-F0-9]{40}|dydx1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{38})$"
+              title="Please enter a valid EVM address (0x...) or dYdX address (dydx1...)"
             />
           </div>
           <button
@@ -57,10 +57,10 @@ export default function AccountsPage() {
         <div className="rounded-xl border border-border bg-card p-6">
           <h3 className="font-semibold mb-2">Supported Exchanges</h3>
           <p className="text-sm text-muted-foreground mb-4">
-            We currently track positions and balances on Hyperliquid and Lighter.
+            We currently track positions and balances on Hyperliquid, Lighter, Ostium, and dYdX.
           </p>
           <div className="flex flex-wrap gap-2">
-            {['Hyperliquid', 'Lighter'].map(ex => (
+            {['Hyperliquid', 'Lighter', 'Ostium', 'dYdX'].map(ex => (
               <span key={ex} className="inline-flex items-center rounded-full border border-border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 bg-secondary text-secondary-foreground">
                 {ex}
               </span>

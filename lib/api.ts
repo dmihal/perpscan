@@ -2,6 +2,9 @@
 export { getHyperliquidContexts, getHyperliquidSpotMeta, getHyperliquidMarkets, getHyperliquidAccount, getHyperliquidFills, getHyperliquidLedgerUpdates, getHyperliquidCandles, getHyperliquidFundingHistory } from './exchanges/hyperliquid';
 export type { Fill, LedgerDelta, LedgerUpdate } from './exchanges/hyperliquid';
 
+export { isDydxAddress, getDydxMarkets, getDydxExchangeStats, getDydxSubaccounts, getDydxPositions, getDydxBalance, getDydxFills, getDydxTransfers, getDydxCandles, getDydxFundingHistory } from './exchanges/dydx';
+export type { DydxSubaccount, DydxPerpetualPosition, DydxAssetPosition, DydxFill, DydxTransfer } from './exchanges/dydx';
+
 export { getLighterMarkets, getLighterExchangeStats, getLighterMarketSpread, getLighterSubAccounts, getLighterAccounts, getLighterAccountLogs, getLighterLog, getLighterLogsForAddress, getLighterAssetPriceMap, getLeverageFromMarginFraction } from './exchanges/lighter';
 export type { LighterSubAccount, LighterAccountAsset, LighterAccountPosition, LighterAccount, LighterExplorerLog } from './exchanges/lighter';
 
@@ -74,6 +77,8 @@ import { getParadexMarkets } from './exchanges/paradex';
 import { getLighterMarkets } from './exchanges/lighter';
 import { getOstiumMarkets } from './exchanges/ostium';
 import { getOstiumExchangeStats } from './exchanges/ostium';
+import { getDydxMarkets } from './exchanges/dydx';
+import { getDydxExchangeStats } from './exchanges/dydx';
 
 export async function getExchangeVolumeHistory(id: string): Promise<ChartDataPoint[]> {
   try {
@@ -95,14 +100,15 @@ export async function getExchangeVolumeHistory(id: string): Promise<ChartDataPoi
 
 export async function getAllVenueMarkets(): Promise<VenueMarket[]> {
   try {
-    const [hlMarkets, paradexMarkets, lighterMarkets, ostiumMarkets] = await Promise.all([
+    const [hlMarkets, paradexMarkets, lighterMarkets, ostiumMarkets, dydxMarkets] = await Promise.all([
       getHyperliquidMarkets(),
       getParadexMarkets(),
       getLighterMarkets(),
       getOstiumMarkets(),
+      getDydxMarkets(),
     ]);
 
-    const markets = [...hlMarkets, ...paradexMarkets, ...lighterMarkets, ...ostiumMarkets];
+    const markets = [...hlMarkets, ...paradexMarkets, ...lighterMarkets, ...ostiumMarkets, ...dydxMarkets];
     return markets.sort((a, b) => b.volume24h - a.volume24h);
   } catch (error) {
     console.error(error);
@@ -112,13 +118,14 @@ export async function getAllVenueMarkets(): Promise<VenueMarket[]> {
 
 export async function getTopExchanges(): Promise<Protocol[]> {
   try {
-    const [res, hlData, lighterStats, ostiumStats] = await Promise.all([
+    const [res, hlData, lighterStats, ostiumStats, dydxStats] = await Promise.all([
       fetch('https://api.llama.fi/overview/derivatives?excludeTotalDataChart=true&excludeTotalDataChartBreakdown=true&dataType=dailyVolume', {
         next: { revalidate: 3600 }
       }),
       getHyperliquidContexts(),
       getLighterExchangeStats(),
       getOstiumExchangeStats(),
+      getDydxExchangeStats(),
     ]);
     
     if (!res.ok) throw new Error('Failed to fetch exchanges');
@@ -193,6 +200,30 @@ export async function getTopExchanges(): Promise<Protocol[]> {
       });
     }
 
+    const dydxProtocol = protocols.find(
+      p => p.name.toLowerCase().includes('dydx') || p.defillamaId?.toLowerCase().includes('dydx')
+    );
+
+    if (dydxProtocol && !selectedProtocols.some(p => p.name.toLowerCase().includes('dydx') || p.defillamaId?.toLowerCase().includes('dydx'))) {
+      selectedProtocols.push(dydxProtocol);
+    }
+
+    if (!dydxProtocol && dydxStats.marketCount > 0) {
+      selectedProtocols.push({
+        defillamaId: 'dydx',
+        name: 'dYdX',
+        displayName: 'dYdX',
+        module: 'dydx',
+        category: 'Derivatives',
+        logo: '',
+        chains: ['dYdX Chain'],
+        total24h: dydxStats.total24h,
+        total7d: 0,
+        total30d: 0,
+        totalAllTime: 0,
+      });
+    }
+
     return selectedProtocols
       .map(p => {
         const isHL = p.name.toLowerCase() === 'hyperliquid' || p.defillamaId === 'hyperliquid' || p.defillamaId === '5507';
@@ -239,6 +270,24 @@ export async function getTopExchanges(): Promise<Protocol[]> {
             totalAllTime: p.totalAllTime || 0,
             openInterest: ostiumStats.openInterest,
             avgSpread: ostiumStats.marketCount > 0 ? ostiumStats.avgSpread / ostiumStats.marketCount : 0,
+          };
+        }
+        const isDydx = p.name.toLowerCase().includes('dydx') || p.defillamaId?.toLowerCase().includes('dydx');
+        if (isDydx) {
+          return {
+            ...p,
+            defillamaId: 'dydx',
+            name: 'dYdX',
+            displayName: 'dYdX',
+            module: p.module || 'dydx',
+            category: p.category || 'Derivatives',
+            chains: p.chains?.length ? p.chains : ['dYdX Chain'],
+            total24h: dydxStats.total24h || p.total24h,
+            total7d: p.total7d || 0,
+            total30d: p.total30d || 0,
+            totalAllTime: p.totalAllTime || 0,
+            openInterest: dydxStats.openInterest,
+            avgSpread: 0,
           };
         }
         return {

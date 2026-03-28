@@ -13,11 +13,29 @@ import {
   getLighterLogsForAddress,
   getOstiumPositions,
   getOstiumTradeHistory,
+  isDydxAddress,
+  getDydxSubaccounts,
+  getDydxPositions,
+  getDydxBalance,
+  getDydxFills,
+  getDydxTransfers,
 } from '@/lib/api';
-import type { Fill, LedgerUpdate, LighterAccount, LighterExplorerLog, OstiumTradeHistoryEntry } from '@/lib/api';
+import type {
+  Fill,
+  LedgerUpdate,
+  LighterAccount,
+  LighterExplorerLog,
+  OstiumTradeHistoryEntry,
+  DydxSubaccount,
+  DydxPerpetualPosition,
+  DydxFill,
+  DydxTransfer,
+} from '@/lib/api';
 import PositionsTable from '@/components/PositionsTable';
 import BalancesTable from '@/components/BalancesTable';
 import TransactionHistoryTable from '@/components/TransactionHistoryTable';
+import DydxPositionsSection from '@/components/DydxPositionsSection';
+import type { DydxPositionRow, DydxSubaccountSummary } from '@/components/DydxPositionsSection';
 
 export const revalidate = 10;
 
@@ -26,9 +44,258 @@ function formatOstiumTradeSummary(trade: OstiumTradeHistoryEntry) {
   return `${trade.action} ${market} @ ${formatCurrency(trade.price)} (${formatCurrency(trade.size)} notional)`;
 }
 
-export default async function AccountPage({ params }: { params: Promise<{ address: string }> }) {
-  const { address } = await params;
+// ────────────────────────────────────────────────────────────────────────────
+// dYdX account page
+// ────────────────────────────────────────────────────────────────────────────
 
+async function DydxAccountPage({ address }: { address: string }) {
+  const [exchanges, dydxSubaccountsRaw, dydxPositionsRaw, dydxBalanceRaw, dydxFillsRaw, dydxTransfersRaw] =
+    await Promise.all([
+      getTopExchanges(),
+      getDydxSubaccounts(address),
+      getDydxPositions(address),
+      getDydxBalance(address),
+      getDydxFills(address),
+      getDydxTransfers(address),
+    ]);
+
+  const totalValue = dydxSubaccountsRaw.reduce((sum, s) => sum + parseFloat(s.equity || '0'), 0);
+  const freeCollateral = dydxSubaccountsRaw.reduce((sum, s) => sum + parseFloat(s.freeCollateral || '0'), 0);
+  const marginUsage = totalValue > 0 ? ((totalValue - freeCollateral) / totalValue) * 100 : 0;
+  const unrealizedPnl = dydxPositionsRaw.reduce((sum, p) => sum + parseFloat(p.unrealizedPnl || '0'), 0);
+
+  const positionRows: DydxPositionRow[] = dydxPositionsRaw.map((p, idx) => {
+    const entryPrice = parseFloat(p.entryPrice || '0');
+    const size = parseFloat(p.size || '0');
+    const pnl = parseFloat(p.unrealizedPnl || '0');
+    const markPrice =
+      size > 0
+        ? p.side === 'LONG'
+          ? entryPrice + pnl / size
+          : entryPrice - pnl / size
+        : entryPrice;
+    return {
+      id: `dydx-${idx}`,
+      exchange: 'dYdX',
+      market: p.market,
+      side: p.side === 'LONG' ? 'Long' : 'Short',
+      size: Math.abs(size),
+      entryPrice,
+      markPrice,
+      pnl,
+      leverage: 1,
+      subaccountNumber: p.subaccountNumber,
+    };
+  });
+
+  const subaccountSummaries: DydxSubaccountSummary[] = dydxSubaccountsRaw.map((s) => ({
+    subaccountNumber: s.subaccountNumber,
+    equity: parseFloat(s.equity || '0'),
+    freeCollateral: parseFloat(s.freeCollateral || '0'),
+  }));
+
+  // USDC balances grouped by subaccount
+  const usdcBySubaccount = new Map<number, number>();
+  for (const pos of dydxBalanceRaw) {
+    if (pos.symbol === 'USDC' || pos.symbol === 'usdc') {
+      usdcBySubaccount.set(
+        pos.subaccountNumber,
+        (usdcBySubaccount.get(pos.subaccountNumber) || 0) + parseFloat(pos.size || '0')
+      );
+    }
+  }
+  const balances = Array.from(usdcBySubaccount.entries()).map(([num, amount]) => ({
+    exchange: num === 0 ? 'dYdX' : `dYdX (Subaccount ${num})`,
+    asset: 'USDC',
+    amount,
+  }));
+
+  const fillTxs = dydxFillsRaw.map((f: DydxFill) => ({
+    hash: `dydx-fill-${f.id}`,
+    time: new Date(f.createdAt).getTime(),
+    type: 'trade' as const,
+    summary: `${f.side} ${f.market} @ ${parseFloat(f.price).toLocaleString()} (${parseFloat(f.size)} units)`,
+    amount: parseFloat(f.price) * parseFloat(f.size),
+    exchange: 'dYdX',
+  }));
+
+  const transferTxs = dydxTransfersRaw.map((t: DydxTransfer) => {
+    const isDeposit = t.type === 'DEPOSIT';
+    const isWithdrawal = t.type === 'WITHDRAWAL';
+    return {
+      hash: t.transactionHash || `dydx-transfer-${t.id}`,
+      time: new Date(t.createdAt).getTime(),
+      type: (isDeposit ? 'deposit' : isWithdrawal ? 'withdrawal' : 'transfer') as
+        | 'deposit'
+        | 'withdrawal'
+        | 'transfer',
+      summary: `${t.type} ${parseFloat(t.size).toLocaleString()} ${t.symbol}`,
+      amount: parseFloat(t.size),
+      exchange: 'dYdX',
+    };
+  });
+
+  const allTransactions = [...fillTxs, ...transferTxs].sort((a, b) => b.time - a.time);
+
+  const hasDydxData = dydxSubaccountsRaw.length > 0 || positionRows.length > 0;
+
+  const exchangeMeta = {
+    dYdX: {
+      name: 'dYdX',
+      href: '/exchanges/dydx',
+      logo: exchanges.find((e) => e.defillamaId === 'dydx')?.logo,
+    },
+  };
+
+  return (
+    <div className="container mx-auto px-4 py-8 max-w-screen-2xl">
+      <Link
+        href="/accounts"
+        className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground mb-8 transition-colors"
+      >
+        <ArrowLeft className="mr-2 h-4 w-4" />
+        Back to Search
+      </Link>
+
+      <div className="flex flex-col md:flex-row md:items-start justify-between gap-8 mb-12">
+        <div className="flex items-center gap-6">
+          <div className="p-4 bg-primary/10 rounded-full">
+            <Wallet className="h-10 w-10 text-primary" />
+          </div>
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight mb-2 font-mono break-all">{address}</h1>
+            <div className="flex items-center gap-3 text-sm text-muted-foreground">
+              <span className="inline-flex items-center rounded-full border border-border px-2.5 py-0.5 text-xs font-semibold bg-secondary text-secondary-foreground">
+                dYdX Account
+              </span>
+              {positionRows.length > 0 && (
+                <span className="flex items-center text-emerald-500">
+                  <Activity className="mr-1 h-3 w-3" />
+                  Active on dYdX
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+        <div className="flex flex-col gap-2">
+          <a
+            href={`https://www.mintscan.io/dydx/address/${address}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground h-10 px-6"
+          >
+            View on Mintscan
+            <ExternalLink className="ml-2 h-4 w-4" />
+          </a>
+        </div>
+      </div>
+
+      <section className="grid gap-4 md:grid-cols-2 mb-8">
+        <div className="rounded-xl border border-border bg-card p-5">
+          <div className="flex items-center justify-between gap-3 mb-2">
+            <h2 className="font-semibold">dYdX</h2>
+            <span
+              className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${
+                hasDydxData ? 'bg-emerald-500/10 text-emerald-500' : 'bg-muted text-muted-foreground'
+              }`}
+            >
+              {hasDydxData ? 'Found' : 'Not Found'}
+            </span>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            {hasDydxData
+              ? `Loaded ${dydxSubaccountsRaw.length} subaccount${dydxSubaccountsRaw.length === 1 ? '' : 's'} with ${positionRows.length} open position${positionRows.length === 1 ? '' : 's'}.`
+              : 'No dYdX account data found for this address.'}
+          </p>
+        </div>
+      </section>
+
+      {!hasDydxData && (
+        <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-4 mb-8 flex items-start gap-3 text-amber-500">
+          <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5" />
+          <div className="text-sm">
+            <p className="font-semibold mb-1">No Account Data Found</p>
+            <p>This address has no public positions, balances, or trade history on dYdX.</p>
+          </div>
+        </div>
+      )}
+
+      {hasDydxData && (
+        <>
+          <section className="grid gap-4 md:grid-cols-3 mb-16">
+            <div className="rounded-xl border border-border bg-card text-card-foreground shadow p-6">
+              <div className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <h3 className="tracking-tight text-sm font-medium">Account Value</h3>
+                <Wallet className="h-4 w-4 text-muted-foreground" />
+              </div>
+              <div className="text-3xl font-bold font-mono">{formatCurrency(totalValue)}</div>
+            </div>
+            <div className="rounded-xl border border-border bg-card text-card-foreground shadow p-6">
+              <div className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <h3 className="tracking-tight text-sm font-medium">Unrealized PnL</h3>
+                <Activity className="h-4 w-4 text-muted-foreground" />
+              </div>
+              <div
+                className={`text-3xl font-bold font-mono ${
+                  unrealizedPnl >= 0 ? 'text-emerald-500' : 'text-destructive'
+                }`}
+              >
+                {unrealizedPnl >= 0 ? '+' : ''}
+                {formatCurrency(unrealizedPnl)}
+              </div>
+            </div>
+            <div className="rounded-xl border border-border bg-card text-card-foreground shadow p-6">
+              <div className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <h3 className="tracking-tight text-sm font-medium">Margin Usage</h3>
+                <Shield className="h-4 w-4 text-muted-foreground" />
+              </div>
+              <div className="text-3xl font-bold font-mono">{marginUsage.toFixed(2)}%</div>
+            </div>
+          </section>
+
+          <div className="space-y-8">
+            <section>
+              <h2 className="text-2xl font-bold tracking-tight mb-4">Open Positions</h2>
+              {positionRows.length > 0 ? (
+                <DydxPositionsSection
+                  positions={positionRows}
+                  subaccounts={subaccountSummaries}
+                  address={address}
+                />
+              ) : (
+                <div className="rounded-xl border border-border bg-card p-8 text-center text-muted-foreground">
+                  No open positions.
+                </div>
+              )}
+            </section>
+
+            <section>
+              <h2 className="text-2xl font-bold tracking-tight mb-4">Balances</h2>
+              {balances.length > 0 ? (
+                <BalancesTable balances={balances} address={address} />
+              ) : (
+                <div className="rounded-xl border border-border bg-card p-8 text-center text-muted-foreground">
+                  No balances found.
+                </div>
+              )}
+            </section>
+          </div>
+        </>
+      )}
+
+      <section className="mt-8">
+        <h2 className="text-2xl font-bold tracking-tight mb-4">Transaction History</h2>
+        <TransactionHistoryTable transactions={allTransactions} address={address} exchangeMeta={exchangeMeta} />
+      </section>
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// EVM account page (existing logic)
+// ────────────────────────────────────────────────────────────────────────────
+
+async function EvmAccountPage({ address }: { address: string }) {
   const [exchanges, hlAccount, hlFills, hlContexts, hlLedger, lighterAccounts, lighterAssetPrices, lighterLogs, ostiumPositions, ostiumTradeHistory] = await Promise.all([
     getTopExchanges(),
     getHyperliquidAccount(address),
@@ -467,4 +734,16 @@ export default async function AccountPage({ params }: { params: Promise<{ addres
       </section>
     </div>
   );
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Route entry point
+// ────────────────────────────────────────────────────────────────────────────
+
+export default async function AccountPage({ params }: { params: Promise<{ address: string }> }) {
+  const { address } = await params;
+  if (isDydxAddress(address)) {
+    return <DydxAccountPage address={address} />;
+  }
+  return <EvmAccountPage address={address} />;
 }
