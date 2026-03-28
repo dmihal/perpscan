@@ -192,7 +192,7 @@ export default async function ExchangeMarketPage({ params }: { params: Promise<{
             <Shield className="h-4 w-4 text-muted-foreground" />
           </div>
           <div className="text-2xl font-bold font-mono text-muted-foreground">
-            {market.spread.toFixed(4)}%
+            {market.spread == null ? 'N/A' : `${market.spread.toFixed(4)}%`}
           </div>
         </div>
       </section>

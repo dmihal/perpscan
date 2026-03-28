@@ -43,7 +43,7 @@ export default function HomepageMarketsTable({ markets }: { markets: Market[] })
                   {market.price_change_percentage_24h?.toFixed(2)}%
                 </td>
                 <td className="px-4 py-3 text-right font-mono text-xs text-muted-foreground">
-                  {market.avgSpread?.toFixed(3)}%
+                  {market.avgSpread == null ? 'N/A' : `${market.avgSpread.toFixed(3)}%`}
                 </td>
               </tr>
             ))}

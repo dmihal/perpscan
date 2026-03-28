@@ -7,7 +7,8 @@ import { useSortable } from '@/hooks/use-sortable';
 import { SortableHeader } from '@/components/SortableHeader';
 
 const fmt = (value: number | undefined) => {
-  if (!value) return '$0.00';
+  if (value == null) return 'N/A';
+  if (value === 0) return '$0.00';
   if (value >= 1e9) return `$${(value / 1e9).toFixed(2)}B`;
   if (value >= 1e6) return `$${(value / 1e6).toFixed(2)}M`;
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
@@ -43,7 +44,9 @@ export default function HomepageExchangesTable({ exchanges }: { exchanges: Proto
                 <td className="px-4 py-3 text-right font-mono text-xs">{fmt(exchange.openInterest)}</td>
                 <td className="px-4 py-3 text-right font-mono text-xs">{fmt(exchange.total24h)}</td>
                 <td className="px-4 py-3 text-right font-mono text-xs text-muted-foreground">{fmt(exchange.total7d)}</td>
-                <td className="px-4 py-3 text-right font-mono text-xs text-muted-foreground">{exchange.avgSpread?.toFixed(3)}%</td>
+                <td className="px-4 py-3 text-right font-mono text-xs text-muted-foreground">
+                  {exchange.avgSpread == null ? 'N/A' : `${exchange.avgSpread.toFixed(3)}%`}
+                </td>
               </tr>
             ))}
           </tbody>

@@ -121,7 +121,7 @@ export default function HyperliquidMarketsTable({ markets }: { markets: VenueMar
                       {formatCurrency(market.openInterest)}
                     </td>
                     <td className="px-6 py-4 text-right font-mono text-muted-foreground">
-                      {market.spread.toFixed(4)}%
+                      {market.spread == null ? 'N/A' : `${market.spread.toFixed(4)}%`}
                     </td>
                     <td className="px-6 py-4 text-right">
                       <Link

@@ -1,19 +1,23 @@
 import Link from 'next/link';
 import { ArrowRight, TrendingUp, BarChart3, Shield } from 'lucide-react';
-import { getTopExchanges, getTopMarkets } from '@/lib/api';
+import { getAllVenueMarkets, getTopExchanges, getTopMarkets } from '@/lib/api';
 import HomepageExchangesTable from '@/components/HomepageExchangesTable';
 import HomepageMarketsTable from '@/components/HomepageMarketsTable';
 
 export const revalidate = 60;
 
 export default async function Home() {
-  const [exchanges, markets] = await Promise.all([
+  const [exchanges, markets, venueMarkets] = await Promise.all([
     getTopExchanges(),
     getTopMarkets(),
+    getAllVenueMarkets(),
   ]);
 
+  const integratedVenueCount = new Set(venueMarkets.map((market) => market.venue)).size;
+
   const fmt = (value: number | undefined) => {
-    if (!value) return '$0.00';
+    if (value == null) return 'N/A';
+    if (value === 0) return '$0.00';
     if (value >= 1e9) return `$${(value / 1e9).toFixed(2)}B`;
     if (value >= 1e6) return `$${(value / 1e6).toFixed(2)}M`;
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
@@ -32,7 +36,7 @@ export default async function Home() {
             {fmt(exchanges.reduce((acc, ex) => acc + (ex.total24h || 0), 0))}
           </div>
           <p className="text-xs text-muted-foreground mt-1">
-            Across top 10 exchanges
+            Across {exchanges.length.toLocaleString()} listed exchanges
           </p>
         </div>
         <div className="rounded-xl border border-border bg-card text-card-foreground shadow p-6">
@@ -40,19 +44,19 @@ export default async function Home() {
             <h3 className="tracking-tight text-sm font-medium">Active Markets</h3>
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </div>
-          <div className="text-2xl font-bold">1,204+</div>
+          <div className="text-2xl font-bold">{venueMarkets.length.toLocaleString()}</div>
           <p className="text-xs text-muted-foreground mt-1">
-            Trading pairs available
+            Live venue markets loaded
           </p>
         </div>
         <div className="rounded-xl border border-border bg-card text-card-foreground shadow p-6">
           <div className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <h3 className="tracking-tight text-sm font-medium">Tracked DEXs</h3>
+            <h3 className="tracking-tight text-sm font-medium">Integrated Venues</h3>
             <Shield className="h-4 w-4 text-muted-foreground" />
           </div>
-          <div className="text-2xl font-bold">54</div>
+          <div className="text-2xl font-bold">{integratedVenueCount.toLocaleString()}</div>
           <p className="text-xs text-muted-foreground mt-1">
-            Protocols integrated
+            Venues with live market data
           </p>
         </div>
       </section>

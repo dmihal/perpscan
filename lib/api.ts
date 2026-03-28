@@ -50,7 +50,7 @@ export interface VenueMarket {
   price: number;
   volume24h: number;
   openInterest: number;
-  spread: number;
+  spread?: number;
   fundingRate: number;
   marketId?: number;
   maxLeverage?: number;
@@ -233,8 +233,8 @@ export async function getTopExchanges(): Promise<Protocol[]> {
             ...p,
             defillamaId: 'hyperliquid',
             total24h: (hlData && hlVolume > 0) ? hlVolume : p.total24h,
-            openInterest: hlData ? hlOI : (p.total24h || 0) * (0.2 + Math.random() * 0.8),
-            avgSpread: (hlData && hlSpreadCount > 0) ? (hlSpreadSum / hlSpreadCount) * 100 : 0.02
+            openInterest: (hlData && hlOI > 0) ? hlOI : p.openInterest,
+            avgSpread: (hlData && hlSpreadCount > 0) ? (hlSpreadSum / hlSpreadCount) * 100 : p.avgSpread,
           };
         }
         if (isLighter) {
@@ -250,8 +250,8 @@ export async function getTopExchanges(): Promise<Protocol[]> {
             total7d: p.total7d || 0,
             total30d: p.total30d || 0,
             totalAllTime: p.totalAllTime || 0,
-            openInterest: lighterStats.openInterest,
-            avgSpread: lighterStats.marketCount > 0 ? lighterStats.avgSpread / lighterStats.marketCount : 0,
+            openInterest: lighterStats.marketCount > 0 ? lighterStats.openInterest : p.openInterest,
+            avgSpread: lighterStats.spreadCount > 0 ? lighterStats.avgSpread / lighterStats.spreadCount : p.avgSpread,
           };
         }
         const isOstium = p.name.toLowerCase() === 'ostium' || p.defillamaId?.toLowerCase() === 'ostium';
@@ -268,8 +268,8 @@ export async function getTopExchanges(): Promise<Protocol[]> {
             total7d: p.total7d || 0,
             total30d: p.total30d || 0,
             totalAllTime: p.totalAllTime || 0,
-            openInterest: ostiumStats.openInterest,
-            avgSpread: ostiumStats.marketCount > 0 ? ostiumStats.avgSpread / ostiumStats.marketCount : 0,
+            openInterest: ostiumStats.marketCount > 0 ? ostiumStats.openInterest : p.openInterest,
+            avgSpread: ostiumStats.spreadCount > 0 ? ostiumStats.avgSpread / ostiumStats.spreadCount : p.avgSpread,
           };
         }
         const isDydx = p.name.toLowerCase().includes('dydx') || p.defillamaId?.toLowerCase().includes('dydx');
@@ -286,15 +286,11 @@ export async function getTopExchanges(): Promise<Protocol[]> {
             total7d: p.total7d || 0,
             total30d: p.total30d || 0,
             totalAllTime: p.totalAllTime || 0,
-            openInterest: dydxStats.openInterest,
-            avgSpread: 0,
+            openInterest: dydxStats.marketCount > 0 ? dydxStats.openInterest : p.openInterest,
+            avgSpread: p.avgSpread,
           };
         }
-        return {
-          ...p,
-          openInterest: (p.total24h || 0) * (0.2 + Math.random() * 0.8),
-          avgSpread: 0.01 + Math.random() * 0.05
-        };
+        return p;
       })
       .filter((protocol, index, list) => list.findIndex(item => item.defillamaId === protocol.defillamaId) === index)
       .sort((a, b) => (b.total24h || 0) - (a.total24h || 0));
@@ -322,13 +318,13 @@ export async function getTopMarkets(): Promise<Market[]> {
       meta.forEach((m: any, idx: number) => {
         const ctx = ctxs[idx];
         if (ctx) {
-          let spread = 0.01 + Math.random() * 0.05;
+          let spread: number | undefined;
           if (ctx.impactPxs && ctx.impactPxs.length === 2 && parseFloat(ctx.midPx) > 0) {
-             spread = ((parseFloat(ctx.impactPxs[1]) - parseFloat(ctx.impactPxs[0])) / parseFloat(ctx.midPx)) * 100;
+            spread = ((parseFloat(ctx.impactPxs[1]) - parseFloat(ctx.impactPxs[0])) / parseFloat(ctx.midPx)) * 100;
           }
           hlMap.set(m.name.toLowerCase(), {
             volume: parseFloat(ctx.dayNtlVlm || "0"),
-            spread: spread
+            spread,
           });
         }
       });
@@ -339,7 +335,7 @@ export async function getTopMarkets(): Promise<Market[]> {
       return {
         ...m,
         total_volume: hlMatch && hlMatch.volume > 0 ? hlMatch.volume : m.total_volume,
-        avgSpread: hlMatch ? hlMatch.spread : 0.005 + Math.random() * 0.04
+        avgSpread: hlMatch?.spread,
       };
     });
   } catch (error) {
@@ -370,7 +366,7 @@ export async function getMarket(id: string): Promise<Market | null> {
     const coinData = await coinRes.json();
     
     let volume = coinData.market_data?.total_volume?.usd || 0;
-    let spread = 0.005 + Math.random() * 0.04;
+    let spread: number | undefined;
     
     if (hlData && hlData[0] && hlData[1]) {
       const meta = hlData[0].universe;

@@ -14,7 +14,7 @@ interface AssetMarket {
   volume24h: number;
   openInterest: number;
   fundingRate: number;
-  spread: number;
+  spread?: number;
 }
 
 export default function AssetMarketsTable({
@@ -62,7 +62,7 @@ export default function AssetMarketsTable({
                   {market.fundingRate >= 0 ? '+' : ''}{market.fundingRate.toFixed(4)}%
                 </td>
                 <td className="px-6 py-4 text-right font-mono text-muted-foreground">
-                  {market.spread.toFixed(4)}%
+                  {market.spread == null ? 'N/A' : `${market.spread.toFixed(4)}%`}
                 </td>
                 <td className="px-6 py-4 text-right">
                   <Link

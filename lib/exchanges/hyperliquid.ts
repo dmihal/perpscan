@@ -53,7 +53,7 @@ export async function getHyperliquidMarkets(): Promise<VenueMarket[]> {
     meta.forEach((m: any, idx: number) => {
       const ctx = ctxs[idx];
       if (ctx) {
-        let spread = 0;
+        let spread: number | undefined;
         if (ctx.impactPxs && ctx.impactPxs.length === 2 && parseFloat(ctx.midPx) > 0) {
           spread = ((parseFloat(ctx.impactPxs[1]) - parseFloat(ctx.impactPxs[0])) / parseFloat(ctx.midPx)) * 100;
         }
@@ -65,7 +65,7 @@ export async function getHyperliquidMarkets(): Promise<VenueMarket[]> {
           price: parseFloat(ctx.markPx || "0"),
           volume24h: parseFloat(ctx.dayNtlVlm || "0"),
           openInterest: parseFloat(ctx.openInterest || "0") * parseFloat(ctx.markPx || "0"),
-          spread: spread,
+          spread,
           fundingRate: parseFloat(ctx.funding || "0") * 100,
           isHip3: spotTokens.has(m.name),
           onlyIsolated: !!m.onlyIsolated

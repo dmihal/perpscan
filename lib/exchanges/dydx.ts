@@ -95,7 +95,6 @@ export async function getDydxMarkets(): Promise<VenueMarket[]> {
         price,
         volume24h: parseFloat(m.volume24H || '0'),
         openInterest,
-        spread: 0,
         fundingRate: parseFloat(m.nextFundingRate || '0') * 100,
         maxLeverage,
       };
@@ -111,7 +110,7 @@ export async function getDydxExchangeStats() {
       acc.openInterest += m.openInterest;
       return acc;
     },
-    { total24h: 0, openInterest: 0, avgSpread: 0, marketCount: markets.length }
+    { total24h: 0, openInterest: 0, avgSpread: 0, marketCount: markets.length, spreadCount: 0 }
   );
 }
 

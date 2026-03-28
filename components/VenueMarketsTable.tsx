@@ -103,7 +103,7 @@ export default function VenueMarketsTable({ markets }: { markets: VenueMarket[] 
                       {market.fundingRate > 0 ? '+' : ''}{market.fundingRate.toFixed(4)}%
                     </td>
                     <td className="px-6 py-4 text-right font-mono text-muted-foreground">
-                      {market.spread.toFixed(3)}%
+                      {market.spread == null ? 'N/A' : `${market.spread.toFixed(3)}%`}
                     </td>
                     <td className="px-6 py-4 text-right">
                       <Link

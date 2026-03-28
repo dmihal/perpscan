@@ -13,7 +13,7 @@ export async function getParadexMarkets(): Promise<VenueMarket[]> {
       const markPrice = parseFloat(m.mark_price || "0");
       const bid = parseFloat(m.bid || "0");
       const ask = parseFloat(m.ask || "0");
-      const spread = markPrice > 0 ? ((ask - bid) / markPrice) * 100 : 0;
+      const spread = markPrice > 0 && ask > 0 && bid > 0 ? ((ask - bid) / markPrice) * 100 : undefined;
       const coin = m.symbol.replace('-USD-PERP', '');
 
       return {
@@ -23,7 +23,7 @@ export async function getParadexMarkets(): Promise<VenueMarket[]> {
         price: markPrice,
         volume24h: parseFloat(m.volume_24h || "0"),
         openInterest: parseFloat(m.open_interest || "0") * markPrice,
-        spread: Math.abs(spread),
+        spread: spread === undefined ? undefined : Math.abs(spread),
         fundingRate: parseFloat(m.funding_rate || "0") * 100,
       };
     });

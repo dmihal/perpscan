@@ -370,7 +370,6 @@ export async function getLighterMarkets(): Promise<VenueMarket[]> {
           price,
           volume24h: parseNumber(market.daily_quote_token_volume),
           openInterest: openInterestBase * price,
-          spread: 0,
           fundingRate: fundingByMarketId.get(market.market_id) ?? 0,
           maxLeverage: getLeverageFromMarginFraction(defaultInitialMarginFraction),
           makerFee: parseNumber(market.maker_fee),
@@ -392,10 +391,13 @@ export async function getLighterExchangeStats() {
     (acc, market) => {
       acc.total24h += market.volume24h;
       acc.openInterest += market.openInterest;
-      acc.avgSpread += market.spread;
+      if (market.spread !== undefined) {
+        acc.avgSpread += market.spread;
+        acc.spreadCount += 1;
+      }
       return acc;
     },
-    { total24h: 0, openInterest: 0, avgSpread: 0, marketCount: markets.length }
+    { total24h: 0, openInterest: 0, avgSpread: 0, marketCount: markets.length, spreadCount: 0 }
   );
 }
 

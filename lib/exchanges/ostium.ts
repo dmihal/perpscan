@@ -347,7 +347,7 @@ export async function getOstiumMarkets(): Promise<VenueMarket[]> {
       // Spread from bid/ask if available, spreadP in subgraph is typically 0
       const spread = priceData && priceData.bid > 0 && priceData.ask > 0
         ? ((priceData.ask - priceData.bid) / priceData.mid) * 100
-        : 0;
+        : undefined;
 
       // Leverage lives on the group, not the pair — divide by 100 (10000 = 100x)
       const maxLeverage = pair.group ? Number(pair.group.maxLeverage) / 100 : 0;
@@ -365,7 +365,7 @@ export async function getOstiumMarkets(): Promise<VenueMarket[]> {
         price,
         volume24h,
         openInterest,
-        spread: Math.abs(spread),
+        spread: spread === undefined ? undefined : Math.abs(spread),
         fundingRate,
         maxLeverage,
         makerFee,
@@ -386,10 +386,13 @@ export async function getOstiumExchangeStats() {
     (acc, market) => {
       acc.total24h += market.volume24h;
       acc.openInterest += market.openInterest;
-      acc.avgSpread += market.spread;
+      if (market.spread !== undefined) {
+        acc.avgSpread += market.spread;
+        acc.spreadCount += 1;
+      }
       return acc;
     },
-    { total24h: 0, openInterest: 0, avgSpread: 0, marketCount: markets.length }
+    { total24h: 0, openInterest: 0, avgSpread: 0, marketCount: markets.length, spreadCount: 0 }
   );
 }
 
