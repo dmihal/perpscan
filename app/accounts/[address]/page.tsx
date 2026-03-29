@@ -19,6 +19,12 @@ import {
   getDydxBalance,
   getDydxFills,
   getDydxTransfers,
+  isSolanaAddress,
+  getPacificaAccount,
+  getPacificaPositions,
+  getPacificaPrices,
+  getPacificaPositionHistory,
+  getPacificaBalanceHistory,
 } from '@/lib/api';
 import type {
   Fill,
@@ -30,6 +36,9 @@ import type {
   DydxPerpetualPosition,
   DydxFill,
   DydxTransfer,
+  PacificaPosition,
+  PacificaPositionHistory,
+  PacificaBalanceHistory,
 } from '@/lib/api';
 import PositionsTable from '@/components/PositionsTable';
 import BalancesTable from '@/components/BalancesTable';
@@ -42,6 +51,222 @@ export const revalidate = 10;
 function formatOstiumTradeSummary(trade: OstiumTradeHistoryEntry) {
   const market = `${trade.pairFrom}-${trade.pairTo}`;
   return `${trade.action} ${market} @ ${formatCurrency(trade.price)} (${formatCurrency(trade.size)} notional)`;
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Solana (Pacifica) account page
+// ────────────────────────────────────────────────────────────────────────────
+
+async function SolanaAccountPage({ address }: { address: string }) {
+  const [exchanges, account, rawPositions, prices, positionHistory, balanceHistory] = await Promise.all([
+    getTopExchanges(),
+    getPacificaAccount(address),
+    getPacificaPositions(address),
+    getPacificaPrices(),
+    getPacificaPositionHistory(address),
+    getPacificaBalanceHistory(address),
+  ]);
+
+  const priceMap = new Map(prices.map(p => [p.symbol, parseFloat(p.mark || '0')]));
+  const hasData = account !== null;
+
+  const equity = parseFloat(account?.account_equity || '0');
+  const balance = parseFloat(account?.balance || '0');
+  const marginUsed = parseFloat(account?.total_margin_used || '0');
+  const unrealizedPnl = equity - balance;
+  const marginUsage = equity > 0 ? (marginUsed / equity) * 100 : 0;
+
+  const positions = rawPositions.map((pos, idx) => {
+    const markPrice = priceMap.get(pos.symbol) || 0;
+    const entryPrice = parseFloat(pos.entry_price || '0');
+    const amount = parseFloat(pos.amount || '0');
+    const side = pos.side === 'bid' ? 'Long' : 'Short';
+    const pnl = side === 'Long'
+      ? (markPrice - entryPrice) * amount
+      : (entryPrice - markPrice) * amount;
+    return {
+      id: `pacifica-${idx}`,
+      exchange: 'Pacifica',
+      market: `${pos.symbol}-USD`,
+      side,
+      size: Math.abs(amount),
+      entryPrice,
+      markPrice,
+      pnl,
+      leverage: entryPrice * amount > 0 ? (entryPrice * Math.abs(amount)) / parseFloat(pos.margin || '1') : 1,
+    };
+  });
+
+  const balances = hasData
+    ? [{ exchange: 'Pacifica', asset: 'USDC', amount: balance }]
+    : [];
+
+  const balanceTxs = balanceHistory.map((b) => ({
+    hash: `pacifica-balance-${b.created_at}`,
+    time: b.created_at,
+    type: (b.event_type === 'deposit' ? 'deposit' : b.event_type === 'withdraw' ? 'withdrawal' : 'transfer') as 'deposit' | 'withdrawal' | 'transfer',
+    summary: `${b.event_type} ${parseFloat(b.amount).toLocaleString()} USDC`,
+    amount: Math.abs(parseFloat(b.amount)),
+    exchange: 'Pacifica',
+  }));
+
+  const tradeTxs = positionHistory.map((h) => ({
+    hash: `pacifica-trade-${h.history_id}`,
+    time: h.created_at,
+    type: 'trade' as const,
+    summary: `${h.side} ${h.symbol} @ ${parseFloat(h.price).toLocaleString()} (${h.amount} units, PnL: ${parseFloat(h.pnl).toFixed(2)})`,
+    amount: parseFloat(h.price) * parseFloat(h.amount),
+    exchange: 'Pacifica',
+  }));
+
+  const allTransactions = [...balanceTxs, ...tradeTxs].sort((a, b) => b.time - a.time);
+
+  const exchangeMeta = {
+    Pacifica: {
+      name: 'Pacifica',
+      href: '/exchanges/pacifica',
+      logo: exchanges.find((e) => e.defillamaId === 'pacifica')?.logo,
+    },
+  };
+
+  return (
+    <div className="container mx-auto px-4 py-8 max-w-screen-2xl">
+      <Link
+        href="/accounts"
+        className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground mb-8 transition-colors"
+      >
+        <ArrowLeft className="mr-2 h-4 w-4" />
+        Back to Search
+      </Link>
+
+      <div className="flex flex-col md:flex-row md:items-start justify-between gap-8 mb-12">
+        <div className="flex items-center gap-6">
+          <div className="p-4 bg-primary/10 rounded-full">
+            <Wallet className="h-10 w-10 text-primary" />
+          </div>
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight mb-2 font-mono break-all">{address}</h1>
+            <div className="flex items-center gap-3 text-sm text-muted-foreground">
+              <span className="inline-flex items-center rounded-full border border-border px-2.5 py-0.5 text-xs font-semibold bg-secondary text-secondary-foreground">
+                Solana Account
+              </span>
+              {positions.length > 0 && (
+                <span className="flex items-center text-emerald-500">
+                  <Activity className="mr-1 h-3 w-3" />
+                  Active on Pacifica
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+        <div className="flex flex-col gap-2">
+          <a
+            href={`https://solscan.io/account/${address}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground h-10 px-6"
+          >
+            View on Solscan
+            <ExternalLink className="ml-2 h-4 w-4" />
+          </a>
+        </div>
+      </div>
+
+      <section className="grid gap-4 md:grid-cols-2 mb-8">
+        <div className="rounded-xl border border-border bg-card p-5">
+          <div className="flex items-center justify-between gap-3 mb-2">
+            <h2 className="font-semibold">Pacifica</h2>
+            <span
+              className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${
+                hasData ? 'bg-emerald-500/10 text-emerald-500' : 'bg-muted text-muted-foreground'
+              }`}
+            >
+              {hasData ? 'Found' : 'Not Found'}
+            </span>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            {hasData
+              ? `Account loaded with ${positions.length} open position${positions.length === 1 ? '' : 's'}.`
+              : 'No Pacifica account data found for this address.'}
+          </p>
+        </div>
+      </section>
+
+      {!hasData && (
+        <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-4 mb-8 flex items-start gap-3 text-amber-500">
+          <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5" />
+          <div className="text-sm">
+            <p className="font-semibold mb-1">No Account Data Found</p>
+            <p>This address has no public positions, balances, or trade history on Pacifica.</p>
+          </div>
+        </div>
+      )}
+
+      {hasData && (
+        <>
+          <section className="grid gap-4 md:grid-cols-3 mb-16">
+            <div className="rounded-xl border border-border bg-card text-card-foreground shadow p-6">
+              <div className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <h3 className="tracking-tight text-sm font-medium">Account Value</h3>
+                <Wallet className="h-4 w-4 text-muted-foreground" />
+              </div>
+              <div className="text-3xl font-bold font-mono">{formatCurrency(equity)}</div>
+            </div>
+            <div className="rounded-xl border border-border bg-card text-card-foreground shadow p-6">
+              <div className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <h3 className="tracking-tight text-sm font-medium">Unrealized PnL</h3>
+                <Activity className="h-4 w-4 text-muted-foreground" />
+              </div>
+              <div
+                className={`text-3xl font-bold font-mono ${
+                  unrealizedPnl >= 0 ? 'text-emerald-500' : 'text-destructive'
+                }`}
+              >
+                {unrealizedPnl >= 0 ? '+' : ''}
+                {formatCurrency(unrealizedPnl)}
+              </div>
+            </div>
+            <div className="rounded-xl border border-border bg-card text-card-foreground shadow p-6">
+              <div className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <h3 className="tracking-tight text-sm font-medium">Margin Usage</h3>
+                <Shield className="h-4 w-4 text-muted-foreground" />
+              </div>
+              <div className="text-3xl font-bold font-mono">{marginUsage.toFixed(2)}%</div>
+            </div>
+          </section>
+
+          <div className="space-y-8">
+            <section>
+              <h2 className="text-2xl font-bold tracking-tight mb-4">Open Positions</h2>
+              {positions.length > 0 ? (
+                <PositionsTable positions={positions} address={address} />
+              ) : (
+                <div className="rounded-xl border border-border bg-card p-8 text-center text-muted-foreground">
+                  No open positions.
+                </div>
+              )}
+            </section>
+
+            <section>
+              <h2 className="text-2xl font-bold tracking-tight mb-4">Balances</h2>
+              {balances.length > 0 ? (
+                <BalancesTable balances={balances} address={address} />
+              ) : (
+                <div className="rounded-xl border border-border bg-card p-8 text-center text-muted-foreground">
+                  No balances found.
+                </div>
+              )}
+            </section>
+          </div>
+        </>
+      )}
+
+      <section className="mt-8">
+        <h2 className="text-2xl font-bold tracking-tight mb-4">Transaction History</h2>
+        <TransactionHistoryTable transactions={allTransactions} address={address} exchangeMeta={exchangeMeta} />
+      </section>
+    </div>
+  );
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -744,6 +969,9 @@ export default async function AccountPage({ params }: { params: Promise<{ addres
   const { address } = await params;
   if (isDydxAddress(address)) {
     return <DydxAccountPage address={address} />;
+  }
+  if (isSolanaAddress(address)) {
+    return <SolanaAccountPage address={address} />;
   }
   return <EvmAccountPage address={address} />;
 }

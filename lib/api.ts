@@ -13,6 +13,9 @@ export { getParadexMarkets, getParadexCandles, getParadexFundingHistory } from '
 export { getOstiumMarkets, getOstiumExchangeStats, getOstiumPositions, getOstiumTradeHistory, getOstiumTradeById, getOstiumOrderByTxHash } from './exchanges/ostium';
 export type { OstiumPosition, OstiumTradeHistoryEntry } from './exchanges/ostium';
 
+export { isSolanaAddress, getPacificaMarkets, getPacificaExchangeStats, getPacificaPrices, getPacificaAccount, getPacificaPositions, getPacificaPositionHistory, getPacificaBalanceHistory, getPacificaOrderHistory, getPacificaCandles } from './exchanges/pacifica';
+export type { PacificaAccountInfo, PacificaPosition, PacificaPositionHistory, PacificaBalanceHistory, PacificaOrderHistory } from './exchanges/pacifica';
+
 // Shared types
 
 export interface Protocol {
@@ -79,6 +82,8 @@ import { getOstiumMarkets } from './exchanges/ostium';
 import { getOstiumExchangeStats } from './exchanges/ostium';
 import { getDydxMarkets } from './exchanges/dydx';
 import { getDydxExchangeStats } from './exchanges/dydx';
+import { getPacificaMarkets as fetchPacificaMarkets } from './exchanges/pacifica';
+import { getPacificaExchangeStats } from './exchanges/pacifica';
 
 export async function getExchangeVolumeHistory(id: string): Promise<ChartDataPoint[]> {
   try {
@@ -100,15 +105,16 @@ export async function getExchangeVolumeHistory(id: string): Promise<ChartDataPoi
 
 export async function getAllVenueMarkets(): Promise<VenueMarket[]> {
   try {
-    const [hlMarkets, paradexMarkets, lighterMarkets, ostiumMarkets, dydxMarkets] = await Promise.all([
+    const [hlMarkets, paradexMarkets, lighterMarkets, ostiumMarkets, dydxMarkets, pacificaMarkets] = await Promise.all([
       getHyperliquidMarkets(),
       getParadexMarkets(),
       getLighterMarkets(),
       getOstiumMarkets(),
       getDydxMarkets(),
+      fetchPacificaMarkets(),
     ]);
 
-    const markets = [...hlMarkets, ...paradexMarkets, ...lighterMarkets, ...ostiumMarkets, ...dydxMarkets];
+    const markets = [...hlMarkets, ...paradexMarkets, ...lighterMarkets, ...ostiumMarkets, ...dydxMarkets, ...pacificaMarkets];
     return markets.sort((a, b) => b.volume24h - a.volume24h);
   } catch (error) {
     console.error(error);
@@ -118,7 +124,7 @@ export async function getAllVenueMarkets(): Promise<VenueMarket[]> {
 
 export async function getTopExchanges(): Promise<Protocol[]> {
   try {
-    const [res, hlData, lighterStats, ostiumStats, dydxStats] = await Promise.all([
+    const [res, hlData, lighterStats, ostiumStats, dydxStats, pacificaStats] = await Promise.all([
       fetch('https://api.llama.fi/overview/derivatives?excludeTotalDataChart=true&excludeTotalDataChartBreakdown=true&dataType=dailyVolume', {
         next: { revalidate: 3600 }
       }),
@@ -126,6 +132,7 @@ export async function getTopExchanges(): Promise<Protocol[]> {
       getLighterExchangeStats(),
       getOstiumExchangeStats(),
       getDydxExchangeStats(),
+      getPacificaExchangeStats(),
     ]);
     
     if (!res.ok) throw new Error('Failed to fetch exchanges');
@@ -224,6 +231,30 @@ export async function getTopExchanges(): Promise<Protocol[]> {
       });
     }
 
+    const pacificaProtocol = protocols.find(
+      p => p.name.toLowerCase() === 'pacifica' || p.defillamaId?.toLowerCase() === 'pacifica'
+    );
+
+    if (pacificaProtocol && !selectedProtocols.some(p => p.name.toLowerCase() === 'pacifica' || p.defillamaId?.toLowerCase() === 'pacifica')) {
+      selectedProtocols.push(pacificaProtocol);
+    }
+
+    if (!pacificaProtocol && pacificaStats.marketCount > 0) {
+      selectedProtocols.push({
+        defillamaId: 'pacifica',
+        name: 'Pacifica',
+        displayName: 'Pacifica',
+        module: 'pacifica',
+        category: 'Derivatives',
+        logo: '',
+        chains: ['Solana'],
+        total24h: pacificaStats.total24h,
+        total7d: 0,
+        total30d: 0,
+        totalAllTime: 0,
+      });
+    }
+
     return selectedProtocols
       .map(p => {
         const isHL = p.name.toLowerCase() === 'hyperliquid' || p.defillamaId === 'hyperliquid' || p.defillamaId === '5507';
@@ -288,6 +319,24 @@ export async function getTopExchanges(): Promise<Protocol[]> {
             totalAllTime: p.totalAllTime || 0,
             openInterest: dydxStats.marketCount > 0 ? dydxStats.openInterest : p.openInterest,
             avgSpread: p.avgSpread,
+          };
+        }
+        const isPacifica = p.name.toLowerCase() === 'pacifica' || p.defillamaId?.toLowerCase() === 'pacifica';
+        if (isPacifica) {
+          return {
+            ...p,
+            defillamaId: 'pacifica',
+            name: 'Pacifica',
+            displayName: 'Pacifica',
+            module: p.module || 'pacifica',
+            category: p.category || 'Derivatives',
+            chains: p.chains?.length ? p.chains : ['Solana'],
+            total24h: pacificaStats.total24h || p.total24h,
+            total7d: p.total7d || 0,
+            total30d: p.total30d || 0,
+            totalAllTime: p.totalAllTime || 0,
+            openInterest: pacificaStats.marketCount > 0 ? pacificaStats.openInterest : p.openInterest,
+            avgSpread: pacificaStats.spreadCount > 0 ? pacificaStats.avgSpread / pacificaStats.spreadCount : p.avgSpread,
           };
         }
         return p;

@@ -1,5 +1,5 @@
-import type { Fill, LedgerUpdate, LighterExplorerLog, OstiumTradeHistoryEntry, DydxFill, DydxTransfer, LighterSubAccount } from './api';
-import { getHyperliquidFills, getHyperliquidLedgerUpdates, getLighterLog, getLighterSubAccounts, getOstiumTradeById, getOstiumOrderByTxHash, getDydxFills, getDydxTransfers, isDydxAddress } from './api';
+import type { Fill, LedgerUpdate, LighterExplorerLog, OstiumTradeHistoryEntry, DydxFill, DydxTransfer, LighterSubAccount, PacificaPositionHistory } from './api';
+import { getHyperliquidFills, getHyperliquidLedgerUpdates, getLighterLog, getLighterSubAccounts, getOstiumTradeById, getOstiumOrderByTxHash, getDydxFills, getDydxTransfers, isDydxAddress, isSolanaAddress, getPacificaPositionHistory } from './api';
 
 export type TxResult =
   | { exchange: 'hyperliquid'; type: 'fill';     data: Fill[];              timestamp: number }
@@ -7,7 +7,8 @@ export type TxResult =
   | { exchange: 'lighter';     type: 'log';      data: LighterExplorerLog;  timestamp: number; accountIndexes: Set<string> }
   | { exchange: 'ostium';      type: 'trade';    data: OstiumTradeHistoryEntry; timestamp: number }
   | { exchange: 'dydx';        type: 'fill';     data: DydxFill;            timestamp: number }
-  | { exchange: 'dydx';        type: 'transfer'; data: DydxTransfer;        timestamp: number };
+  | { exchange: 'dydx';        type: 'transfer'; data: DydxTransfer;        timestamp: number }
+  | { exchange: 'pacifica';    type: 'trade';    data: PacificaPositionHistory; timestamp: number };
 
 function lighterLogTouchesAccount(log: LighterExplorerLog, accountIndexes: Set<string>, address: string) {
   const deposit = log.pubdata?.l1_deposit_pubdata_v2;
@@ -23,7 +24,21 @@ function lighterLogTouchesAccount(log: LighterExplorerLog, accountIndexes: Set<s
 
 export async function resolveTx(address: string, hash: string): Promise<TxResult | null> {
   const isDydx = isDydxAddress(address);
+  const isSolana = isSolanaAddress(address);
   const ostiumTradeId = hash.startsWith('ostium-trade-') ? hash.slice('ostium-trade-'.length) : null;
+  const pacificaTradeId = hash.startsWith('pacifica-trade-') ? hash.slice('pacifica-trade-'.length) : null;
+
+  // Pacifica (Solana) addresses only need Pacifica lookups
+  if (isSolana) {
+    if (pacificaTradeId) {
+      const history = await getPacificaPositionHistory(address);
+      const match = history.find(h => h.history_id.toString() === pacificaTradeId);
+      if (match) {
+        return { exchange: 'pacifica', type: 'trade', data: match, timestamp: match.created_at };
+      }
+    }
+    return null;
+  }
 
   const [fills, ledger, lighterSubAccounts, lighterLog, ostiumTrade, ostiumOrder, dydxFills, dydxTransfers] =
     await Promise.all([

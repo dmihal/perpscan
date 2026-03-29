@@ -6,6 +6,7 @@ import { TradeDetail, LedgerDetail, TypeBadge } from '@/components/tx/Hyperliqui
 import { LighterLogDetail, LighterTypeBadge } from '@/components/tx/LighterDetail';
 import { OstiumTradeDetail } from '@/components/tx/OstiumDetail';
 import { DydxFillDetail, DydxTransferDetail, DydxTransferBadge } from '@/components/tx/DydxDetail';
+import { PacificaTradeDetail } from '@/components/tx/PacificaDetail';
 
 export const revalidate = 60;
 
@@ -23,6 +24,8 @@ function getTxMeta(result: TxResult, hash: string): { heading: string; badge: Re
       return result.type === 'fill'
         ? { heading: `dYdX ${result.data.side} ${result.data.market}`, badge: <span className="inline-flex items-center rounded-full px-3 py-1 text-sm font-semibold bg-blue-500/10 text-blue-500">dYdX Trade</span>, externalHref: `https://www.mintscan.io/dydx`, externalLabel: 'View on Mintscan' }
         : { heading: `dYdX ${result.data.type}`, badge: <DydxTransferBadge type={result.data.type} />, externalHref: `https://www.mintscan.io/dydx`, externalLabel: 'View on Mintscan' };
+    case 'pacifica':
+      return { heading: `Pacifica ${result.data.side} ${result.data.symbol}`, badge: <span className="inline-flex items-center rounded-full px-3 py-1 text-sm font-semibold bg-blue-500/10 text-blue-500">Pacifica Trade</span>, externalHref: `https://app.pacifica.fi`, externalLabel: 'View on Pacifica' };
   }
 }
 
@@ -40,6 +43,8 @@ function TxDetail({ result, address, hash }: { result: TxResult; address: string
       return result.type === 'fill'
         ? <DydxFillDetail fill={result.data} />
         : <DydxTransferDetail transfer={result.data} address={address} />;
+    case 'pacifica':
+      return <PacificaTradeDetail trade={result.data} />;
   }
 }
 
