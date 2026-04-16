@@ -5,6 +5,7 @@ import { getLeverageFromMarginFraction } from '@/lib/exchanges/lighter';
 import {
   getTopExchanges,
   getHyperliquidAccount,
+  getHyperliquidSpotBalances,
   getHyperliquidFills,
   getHyperliquidContexts,
   getHyperliquidLedgerUpdates,
@@ -521,9 +522,10 @@ async function DydxAccountPage({ address }: { address: string }) {
 // ────────────────────────────────────────────────────────────────────────────
 
 async function EvmAccountPage({ address }: { address: string }) {
-  const [exchanges, hlAccount, hlFills, hlContexts, hlLedger, lighterAccounts, lighterAssetPrices, lighterLogs, ostiumPositions, ostiumTradeHistory] = await Promise.all([
+  const [exchanges, hlAccount, hlSpotBalances, hlFills, hlContexts, hlLedger, lighterAccounts, lighterAssetPrices, lighterLogs, ostiumPositions, ostiumTradeHistory] = await Promise.all([
     getTopExchanges(),
     getHyperliquidAccount(address),
+    getHyperliquidSpotBalances(address),
     getHyperliquidFills(address),
     getHyperliquidContexts(),
     getHyperliquidLedgerUpdates(address),
@@ -544,7 +546,7 @@ async function EvmAccountPage({ address }: { address: string }) {
     });
   }
 
-  const hasHyperliquidData = Boolean(hlAccount && hlAccount.marginSummary);
+  const hasHyperliquidData = Boolean((hlAccount && hlAccount.marginSummary) || hlSpotBalances.length > 0);
   const hasLighterData = lighterAccounts.length > 0;
   const hasOstiumData = ostiumPositions.length > 0 || ostiumTradeHistory.length > 0;
   const hasData = hasHyperliquidData || hasLighterData || hasOstiumData;
@@ -590,8 +592,16 @@ async function EvmAccountPage({ address }: { address: string }) {
       });
     });
 
-    balances.push({ exchange: 'Hyperliquid', asset: 'USDC', amount: hlValue });
+    if (hlValue > 0) balances.push({ exchange: 'Hyperliquid', asset: 'USDC (Perp)', amount: hlValue });
   }
+
+  hlSpotBalances.forEach(b => {
+    const amount = parseFloat(b.total);
+    if (!amount) return;
+    const usdValue = b.coin === 'USDC' ? amount : 0;
+    totalValue += usdValue;
+    balances.push({ exchange: 'Hyperliquid', asset: `${b.coin} (Spot)`, amount });
+  });
 
   lighterAccounts.forEach((account: LighterAccount) => {
     const accountValue = parseNumber(account.total_asset_value) || parseNumber(account.collateral);

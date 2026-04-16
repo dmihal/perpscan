@@ -1,6 +1,6 @@
 // Re-export exchange-specific modules
-export { getHyperliquidContexts, getHyperliquidSpotMeta, getHyperliquidMarkets, getHyperliquidAccount, getHyperliquidFills, getHyperliquidLedgerUpdates, getHyperliquidCandles, getHyperliquidFundingHistory } from './exchanges/hyperliquid';
-export type { Fill, LedgerDelta, LedgerUpdate } from './exchanges/hyperliquid';
+export { getHyperliquidContexts, getHyperliquidSpotMeta, getHyperliquidMarkets, getHyperliquidAccount, getHyperliquidSpotBalances, getHyperliquidFills, getHyperliquidLedgerUpdates, getHyperliquidCandles, getHyperliquidFundingHistory } from './exchanges/hyperliquid';
+export type { Fill, LedgerDelta, LedgerUpdate, SpotBalance } from './exchanges/hyperliquid';
 
 export { isDydxAddress, getDydxMarkets, getDydxExchangeStats, getDydxSubaccounts, getDydxPositions, getDydxBalance, getDydxFills, getDydxTransfers, getDydxCandles, getDydxFundingHistory } from './exchanges/dydx';
 export type { DydxSubaccount, DydxPerpetualPosition, DydxAssetPosition, DydxFill, DydxTransfer } from './exchanges/dydx';

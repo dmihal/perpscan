@@ -112,6 +112,30 @@ export interface Fill {
   crossed: boolean;
 }
 
+export interface SpotBalance {
+  coin: string;
+  token: number;
+  total: string;
+  hold: string;
+}
+
+export async function getHyperliquidSpotBalances(address: string): Promise<SpotBalance[]> {
+  try {
+    const res = await fetch("https://api.hyperliquid.xyz/info", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "spotClearinghouseState", user: address }),
+      next: { revalidate: 10 }
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.balances as SpotBalance[]).filter(b => parseFloat(b.total) > 0);
+  } catch (e) {
+    console.error(e);
+    return [];
+  }
+}
+
 export async function getHyperliquidFills(address: string, limit: number = 100): Promise<Fill[]> {
   try {
     const res = await fetch("https://api.hyperliquid.xyz/info", {
