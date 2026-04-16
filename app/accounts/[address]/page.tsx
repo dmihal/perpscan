@@ -10,6 +10,8 @@ import {
   getHyperliquidContexts,
   getHyperliquidLedgerUpdates,
   getHyperliquidWithdrawActions,
+  getHyperliquidUserFees,
+  getHyperliquidVaultEquities,
   getLighterAccounts,
   getLighterAssetPriceMap,
   getLighterLogsForAddress,
@@ -28,6 +30,7 @@ import {
   getPacificaPositionHistory,
   getPacificaBalanceHistory,
 } from '@/lib/api';
+import { HyperliquidVenueCard } from '@/components/venue/HyperliquidVenueCard';
 import type {
   Fill,
   LedgerUpdate,
@@ -524,7 +527,7 @@ async function DydxAccountPage({ address }: { address: string }) {
 // ────────────────────────────────────────────────────────────────────────────
 
 async function EvmAccountPage({ address }: { address: string }) {
-  const [exchanges, hlAccount, hlSpotBalances, hlFills, hlContexts, hlLedger, hlWithdrawActions, lighterAccounts, lighterAssetPrices, lighterLogs, ostiumPositions, ostiumTradeHistory] = await Promise.all([
+  const [exchanges, hlAccount, hlSpotBalances, hlFills, hlContexts, hlLedger, hlWithdrawActions, hlUserFees, hlVaultEquities, lighterAccounts, lighterAssetPrices, lighterLogs, ostiumPositions, ostiumTradeHistory] = await Promise.all([
     getTopExchanges(),
     getHyperliquidAccount(address),
     getHyperliquidSpotBalances(address),
@@ -532,6 +535,8 @@ async function EvmAccountPage({ address }: { address: string }) {
     getHyperliquidContexts(),
     getHyperliquidLedgerUpdates(address),
     getHyperliquidWithdrawActions(address),
+    getHyperliquidUserFees(address),
+    getHyperliquidVaultEquities(address),
     getLighterAccounts(address),
     getLighterAssetPriceMap(),
     getLighterLogsForAddress(address),
@@ -982,6 +987,15 @@ async function EvmAccountPage({ address }: { address: string }) {
             </section>
           </div>
         </>
+      )}
+
+      {hasHyperliquidData && (
+        <section className="mt-8">
+          <h2 className="text-2xl font-bold tracking-tight mb-4">Venue Details</h2>
+          <div className="space-y-4">
+            <HyperliquidVenueCard fees={hlUserFees} vaults={hlVaultEquities} />
+          </div>
+        </section>
       )}
 
       <section className="mt-8">

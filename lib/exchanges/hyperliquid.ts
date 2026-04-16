@@ -242,6 +242,61 @@ export async function getHyperliquidCandles(coin: string, interval: string = '1d
   }
 }
 
+export interface HyperliquidUserFees {
+  userCrossRate: string;
+  userAddRate: string;
+  userSpotCrossRate: string;
+  userSpotAddRate: string;
+  activeReferralDiscount: string;
+  activeStakingDiscount: { bpsOfMaxSupply: string; discount: string };
+  feeSchedule: {
+    cross: string;
+    add: string;
+    spotCross: string;
+    spotAdd: string;
+    tiers: {
+      vip: { ntlCutoff: string; cross: string; add: string; spotCross: string; spotAdd: string }[];
+    };
+  };
+}
+
+export async function getHyperliquidUserFees(address: string): Promise<HyperliquidUserFees | null> {
+  try {
+    const res = await fetch("https://api-ui.hyperliquid.xyz/info", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "userFees", user: address }),
+      next: { revalidate: 60 }
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (e) {
+    console.error(e);
+    return null;
+  }
+}
+
+export interface VaultEquity {
+  vault: string;
+  equity: string;
+}
+
+export async function getHyperliquidVaultEquities(address: string): Promise<VaultEquity[]> {
+  try {
+    const res = await fetch("https://api.hyperliquid.xyz/info", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "userVaultEquities", user: address }),
+      next: { revalidate: 30 }
+    });
+    if (!res.ok) return [];
+    return await res.json();
+  } catch (e) {
+    console.error(e);
+    return [];
+  }
+}
+
 export async function getHyperliquidFundingHistory(coin: string, days: number = 30): Promise<ChartDataPoint[]> {
   try {
     const startTime = Date.now() - days * 24 * 60 * 60 * 1000;
