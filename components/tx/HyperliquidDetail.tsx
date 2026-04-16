@@ -12,6 +12,7 @@ export function TypeBadge({ type }: { type: string }) {
     internalTransfer:     { className: 'bg-purple-500/10 text-purple-500',    label: 'Internal Transfer' },
     subAccountTransfer:   { className: 'bg-purple-500/10 text-purple-500',    label: 'Sub-account Transfer' },
     spotTransfer:         { className: 'bg-indigo-500/10 text-indigo-500',    label: 'Spot Transfer' },
+    send:                 { className: 'bg-purple-500/10 text-purple-500',    label: 'Send' },
     liquidation:          { className: 'bg-destructive/10 text-destructive',  label: 'Liquidation' },
     vaultDeposit:         { className: 'bg-cyan-500/10 text-cyan-500',        label: 'Vault Deposit' },
     vaultWithdraw:        { className: 'bg-cyan-500/10 text-cyan-500',        label: 'Vault Withdrawal' },
@@ -131,7 +132,7 @@ export function LedgerDetail({ update, address }: { update: LedgerUpdate; addres
       <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
         {d.type === 'deposit' && <Landmark className="h-5 w-5 text-emerald-500" />}
         {d.type === 'withdraw' && <Landmark className="h-5 w-5 text-orange-500" />}
-        {(d.type === 'accountClassTransfer' || d.type === 'internalTransfer' || d.type === 'subAccountTransfer' || d.type === 'spotTransfer') && <ArrowRightLeft className="h-5 w-5 text-purple-500" />}
+        {(d.type === 'accountClassTransfer' || d.type === 'internalTransfer' || d.type === 'subAccountTransfer' || d.type === 'spotTransfer' || d.type === 'send') && <ArrowRightLeft className="h-5 w-5 text-purple-500" />}
         {d.type === 'liquidation' && <AlertTriangle className="h-5 w-5 text-destructive" />}
         Transaction Details
       </h2>
@@ -192,6 +193,25 @@ export function LedgerDetail({ update, address }: { update: LedgerUpdate; addres
             <DetailRow label="Token">{d.token}</DetailRow>
             <DetailRow label="Amount"><span className="font-mono">{parseFloat(d.amount).toLocaleString()} {d.token}</span></DetailRow>
             <DetailRow label="USD Value"><span className="font-mono">{formatCurrency(parseFloat(d.usdcValue))}</span></DetailRow>
+            <DetailRow label="From">
+              <Link href={`/accounts/${d.user}`} className="text-primary hover:underline font-mono text-xs">{d.user}</Link>
+            </DetailRow>
+            <DetailRow label="To">
+              <Link href={`/accounts/${d.destination}`} className="text-primary hover:underline font-mono text-xs">{d.destination}</Link>
+            </DetailRow>
+            <DetailRow label="Fee">
+              <span className="font-mono text-muted-foreground">{formatCurrency(parseFloat(d.fee))}</span>
+            </DetailRow>
+          </>
+        )}
+
+        {d.type === 'send' && (
+          <>
+            <DetailRow label="Token">{d.token}</DetailRow>
+            <DetailRow label="Amount"><span className="font-mono">{parseFloat(d.amount).toLocaleString()} {d.token}</span></DetailRow>
+            <DetailRow label="USD Value"><span className="font-mono">{formatCurrency(parseFloat(d.usdcValue))}</span></DetailRow>
+            {d.sourceDex && <DetailRow label="Source">{d.sourceDex}</DetailRow>}
+            {d.destinationDex && <DetailRow label="Destination">{d.destinationDex}</DetailRow>}
             <DetailRow label="From">
               <Link href={`/accounts/${d.user}`} className="text-primary hover:underline font-mono text-xs">{d.user}</Link>
             </DetailRow>

@@ -160,6 +160,7 @@ export type LedgerDelta =
   | { type: 'spotTransfer'; token: string; amount: string; usdcValue: string; user: string; destination: string; fee: string; nativeTokenFee: string; nonce: number | null }
   | { type: 'internalTransfer'; usdc: string; user: string; destination: string; fee: string }
   | { type: 'subAccountTransfer'; usdc: string; user: string; destination: string }
+  | { type: 'send'; user: string; destination: string; token: string; amount: string; usdcValue: string; fee: string; nativeTokenFee: string; nonce: number; feeToken: string; sourceDex: string; destinationDex: string }
   | { type: 'liquidation'; liquidatedNtlPos: string; accountValue: string; leverageType: string; liquidatedPositions: { coin: string; szi: string }[] }
   | { type: 'vaultDeposit'; vault: string; usdc: string }
   | { type: 'vaultWithdraw'; vault: string; user: string; requestedUsd: string; commission: string; closingCost: string; basis: string; netWithdrawnUsd: string }

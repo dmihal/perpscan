@@ -730,6 +730,16 @@ async function EvmAccountPage({ address }: { address: string }) {
         summary = `Spot transfer ${parseFloat(d.amount)} ${d.token} -> ${d.destination.slice(0, 8)}...`;
         amount = Math.abs(parseFloat(d.usdcValue));
         break;
+      case 'send': {
+        const isIncoming = d.destination.toLowerCase() === address.toLowerCase();
+        const counterparty = isIncoming ? d.user : d.destination;
+        const dex = d.sourceDex || d.destinationDex;
+        const dexLabel = dex ? ` (${dex})` : '';
+        type = 'transfer';
+        summary = `${isIncoming ? 'Received' : 'Sent'} ${parseFloat(d.amount)} ${d.token}${dexLabel} ${isIncoming ? 'from' : 'to'} ${counterparty.slice(0, 8)}...`;
+        amount = Math.abs(parseFloat(d.usdcValue));
+        break;
+      }
       case 'liquidation':
         type = 'liquidation';
         summary = `Liquidated ${d.leverageType} - ${parseFloat(d.liquidatedNtlPos).toLocaleString()} notional`;
