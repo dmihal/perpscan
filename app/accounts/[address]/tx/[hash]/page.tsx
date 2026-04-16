@@ -34,7 +34,7 @@ function TxDetail({ result, address, hash }: { result: TxResult; address: string
     case 'hyperliquid':
       return result.type === 'fill'
         ? <TradeDetail fills={result.data} address={address} />
-        : <LedgerDetail update={result.data} address={address} />;
+        : <LedgerDetail update={result.data} address={address} withdrawDestination={result.withdrawDestination} />;
     case 'lighter':
       return <LighterLogDetail log={result.data} accountIndexes={result.accountIndexes} />;
     case 'ostium':

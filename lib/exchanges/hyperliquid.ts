@@ -173,6 +173,37 @@ export interface LedgerUpdate {
   delta: LedgerDelta;
 }
 
+export interface WithdrawAction {
+  hash: string;
+  time: number;
+  destination: string;
+  amount: string;
+}
+
+export async function getHyperliquidWithdrawActions(address: string): Promise<WithdrawAction[]> {
+  try {
+    const res = await fetch("https://rpc.hyperliquid.xyz/explorer", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "userDetails", user: address }),
+      next: { revalidate: 30 }
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.txs as any[])
+      .filter(tx => tx.action?.type === 'withdraw3' && !tx.error)
+      .map(tx => ({
+        hash: tx.hash,
+        time: tx.action.time,
+        destination: tx.action.destination,
+        amount: tx.action.amount,
+      }));
+  } catch (e) {
+    console.error(e);
+    return [];
+  }
+}
+
 export async function getHyperliquidLedgerUpdates(address: string, days: number = 90): Promise<LedgerUpdate[]> {
   try {
     const startTime = Date.now() - days * 24 * 60 * 60 * 1000;

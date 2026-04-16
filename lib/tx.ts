@@ -1,9 +1,9 @@
 import type { Fill, LedgerUpdate, LighterExplorerLog, OstiumTradeHistoryEntry, DydxFill, DydxTransfer, LighterSubAccount, PacificaPositionHistory } from './api';
-import { getHyperliquidFills, getHyperliquidLedgerUpdates, getLighterLog, getLighterSubAccounts, getOstiumTradeById, getOstiumOrderByTxHash, getDydxFills, getDydxTransfers, isDydxAddress, isSolanaAddress, getPacificaPositionHistory } from './api';
+import { getHyperliquidFills, getHyperliquidLedgerUpdates, getHyperliquidWithdrawActions, getLighterLog, getLighterSubAccounts, getOstiumTradeById, getOstiumOrderByTxHash, getDydxFills, getDydxTransfers, isDydxAddress, isSolanaAddress, getPacificaPositionHistory } from './api';
 
 export type TxResult =
   | { exchange: 'hyperliquid'; type: 'fill';     data: Fill[];              timestamp: number }
-  | { exchange: 'hyperliquid'; type: 'ledger';   data: LedgerUpdate;        timestamp: number }
+  | { exchange: 'hyperliquid'; type: 'ledger';   data: LedgerUpdate;        timestamp: number; withdrawDestination?: string }
   | { exchange: 'lighter';     type: 'log';      data: LighterExplorerLog;  timestamp: number; accountIndexes: Set<string> }
   | { exchange: 'ostium';      type: 'trade';    data: OstiumTradeHistoryEntry; timestamp: number }
   | { exchange: 'dydx';        type: 'fill';     data: DydxFill;            timestamp: number }
@@ -40,10 +40,11 @@ export async function resolveTx(address: string, hash: string): Promise<TxResult
     return null;
   }
 
-  const [fills, ledger, lighterSubAccounts, lighterLog, ostiumTrade, ostiumOrder, dydxFills, dydxTransfers] =
+  const [fills, ledger, withdrawActions, lighterSubAccounts, lighterLog, ostiumTrade, ostiumOrder, dydxFills, dydxTransfers] =
     await Promise.all([
       isDydx ? Promise.resolve([]) : getHyperliquidFills(address, 2000),
       isDydx ? Promise.resolve([]) : getHyperliquidLedgerUpdates(address),
+      isDydx ? Promise.resolve([]) : getHyperliquidWithdrawActions(address),
       isDydx ? Promise.resolve([]) : getLighterSubAccounts(address),
       isDydx ? Promise.resolve(null) : getLighterLog(hash),
       ostiumTradeId ? getOstiumTradeById(ostiumTradeId) : Promise.resolve(null),
@@ -61,7 +62,13 @@ export async function resolveTx(address: string, hash: string): Promise<TxResult
   // Hyperliquid ledger
   const matchingLedger = (ledger as LedgerUpdate[]).find((u) => u.hash === hash);
   if (matchingLedger) {
-    return { exchange: 'hyperliquid', type: 'ledger', data: matchingLedger, timestamp: matchingLedger.time };
+    let withdrawDestination: string | undefined;
+    if (matchingLedger.delta.type === 'withdraw') {
+      const nonce = matchingLedger.delta.nonce;
+      const match = withdrawActions.find((a: any) => a.time * 1000 === nonce);
+      withdrawDestination = match?.destination;
+    }
+    return { exchange: 'hyperliquid', type: 'ledger', data: matchingLedger, timestamp: matchingLedger.time, withdrawDestination };
   }
 
   // Lighter

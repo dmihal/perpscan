@@ -9,6 +9,7 @@ import {
   getHyperliquidFills,
   getHyperliquidContexts,
   getHyperliquidLedgerUpdates,
+  getHyperliquidWithdrawActions,
   getLighterAccounts,
   getLighterAssetPriceMap,
   getLighterLogsForAddress,
@@ -30,6 +31,7 @@ import {
 import type {
   Fill,
   LedgerUpdate,
+  WithdrawAction,
   LighterAccount,
   LighterExplorerLog,
   OstiumTradeHistoryEntry,
@@ -522,13 +524,14 @@ async function DydxAccountPage({ address }: { address: string }) {
 // ────────────────────────────────────────────────────────────────────────────
 
 async function EvmAccountPage({ address }: { address: string }) {
-  const [exchanges, hlAccount, hlSpotBalances, hlFills, hlContexts, hlLedger, lighterAccounts, lighterAssetPrices, lighterLogs, ostiumPositions, ostiumTradeHistory] = await Promise.all([
+  const [exchanges, hlAccount, hlSpotBalances, hlFills, hlContexts, hlLedger, hlWithdrawActions, lighterAccounts, lighterAssetPrices, lighterLogs, ostiumPositions, ostiumTradeHistory] = await Promise.all([
     getTopExchanges(),
     getHyperliquidAccount(address),
     getHyperliquidSpotBalances(address),
     getHyperliquidFills(address),
     getHyperliquidContexts(),
     getHyperliquidLedgerUpdates(address),
+    getHyperliquidWithdrawActions(address),
     getLighterAccounts(address),
     getLighterAssetPriceMap(),
     getLighterLogsForAddress(address),
@@ -693,6 +696,11 @@ async function EvmAccountPage({ address }: { address: string }) {
     exchange: 'Hyperliquid',
   }));
 
+  // nonce in ledger is action.time * 1000 — build a map for O(1) lookup
+  const withdrawDestByNonce = new Map<number, string>(
+    hlWithdrawActions.map((a: WithdrawAction) => [a.time * 1000, a.destination])
+  );
+
   const ledgerTxs = hlLedger.map((u: LedgerUpdate) => {
     const d = u.delta;
     let type: 'deposit' | 'withdrawal' | 'transfer' | 'liquidation' | 'staking' | 'vault' | 'spot' = 'transfer';
@@ -705,11 +713,14 @@ async function EvmAccountPage({ address }: { address: string }) {
         summary = `Deposited ${parseFloat(d.usdc).toLocaleString()} USDC`;
         amount = Math.abs(parseFloat(d.usdc));
         break;
-      case 'withdraw':
+      case 'withdraw': {
         type = 'withdrawal';
-        summary = `Withdrew ${parseFloat(d.usdc).toLocaleString()} USDC (fee: $${parseFloat(d.fee)})`;
+        const dest = withdrawDestByNonce.get(d.nonce);
+        const destStr = dest ? ` to ${dest.slice(0, 8)}...` : '';
+        summary = `Withdrew ${parseFloat(d.usdc).toLocaleString()} USDC${destStr} (fee: $${parseFloat(d.fee)})`;
         amount = Math.abs(parseFloat(d.usdc));
         break;
+      }
       case 'accountClassTransfer':
         type = 'transfer';
         summary = `Transferred ${parseFloat(d.usdc).toLocaleString()} USDC ${d.toPerp ? 'to Perp' : 'to Spot'}`;

@@ -124,7 +124,7 @@ export function TradeDetail({ fills, address }: { fills: Fill[]; address: string
   );
 }
 
-export function LedgerDetail({ update, address }: { update: LedgerUpdate; address: string }) {
+export function LedgerDetail({ update, address, withdrawDestination }: { update: LedgerUpdate; address: string; withdrawDestination?: string }) {
   const d = update.delta;
 
   return (
@@ -148,8 +148,25 @@ export function LedgerDetail({ update, address }: { update: LedgerUpdate; addres
             <DetailRow label="Amount Withdrawn">
               <span className="font-mono text-orange-500">-{formatCurrency(Math.abs(parseFloat(d.usdc)))}</span>
             </DetailRow>
-            <DetailRow label="Fee">
+            <DetailRow label="Bridge Fee">
               <span className="font-mono text-muted-foreground">{formatCurrency(parseFloat(d.fee))}</span>
+            </DetailRow>
+            <DetailRow label="Net Received">
+              <span className="font-mono text-orange-400">{formatCurrency(Math.abs(parseFloat(d.usdc)) - parseFloat(d.fee))}</span>
+            </DetailRow>
+            <DetailRow label="Destination">
+              {withdrawDestination ? (
+                <a
+                  href={`https://arbiscan.io/address/${withdrawDestination}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline font-mono text-xs"
+                >
+                  {withdrawDestination}
+                </a>
+              ) : (
+                <span className="text-xs text-muted-foreground">Arbitrum (address not available)</span>
+              )}
             </DetailRow>
           </>
         )}
